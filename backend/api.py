@@ -1018,6 +1018,28 @@ async def ping():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
 
+@app.get("/ngrok-url")
+async def get_ngrok_url():
+    """Get the current ngrok public URL if available."""
+    import subprocess
+    import json
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "http://localhost:4040/api/tunnels"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            tunnels = json.loads(result.stdout)
+            for tunnel in tunnels.get("tunnels", []):
+                if tunnel.get("proto") == "https":
+                    return {"ngrok_url": tunnel["public_url"]}
+    except Exception:
+        pass
+    return {"ngrok_url": None}
+
+
 @app.get("/test")
 async def test_endpoint():
     """Simple test endpoint - returns plain text with explicit 200 status"""

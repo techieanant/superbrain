@@ -26,8 +26,12 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgomp1 \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir yt-dlp
+    && pip install --no-cache-dir yt-dlp \
+    && curl -sSL https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o /tmp/ngrok.zip \
+    && unzip -o /tmp/ngrok.zip -d /usr/local/bin \
+    && rm /tmp/ngrok.zip
 
 WORKDIR /app
 

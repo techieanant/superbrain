@@ -24,6 +24,7 @@ const SettingsScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const [apiToken, setApiToken] = useState('');
   const [apiUrl, setApiUrl] = useState('');
+  const [ngrokUrl, setNgrokUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'testing'>('disconnected');
@@ -48,6 +49,8 @@ const SettingsScreen = () => {
         testConnection();
         // Load queue status in background
         apiService.getQueueStatus().then(s => setQueueStatus(s)).catch(() => {});
+        // Load ngrok URL in background
+        apiService.getNgrokUrl().then(url => setNgrokUrl(url)).catch(() => {});
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -184,6 +187,21 @@ const SettingsScreen = () => {
               {testing ? 'Testing...' : 'Test Connection'}
             </Text>
           </TouchableOpacity>
+
+          {/* Ngrok URL Display */}
+          {ngrokUrl && (
+            <TouchableOpacity 
+              style={{ marginTop: 12, padding: 10, backgroundColor: colors.success + '18', borderRadius: 8 }}
+              onPress={() => Linking.openURL(ngrokUrl)}
+            >
+              <Text style={{ color: colors.success, fontSize: 13, fontWeight: '600' }}>
+                🔗 ngrok: {ngrokUrl}
+              </Text>
+              <Text style={{ color: colors.success, fontSize: 11, marginTop: 4 }}>
+                Tap to open
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Live processing/queue status */}
           {queueStatus !== null && (queueStatus.processing_count > 0 || queueStatus.queue_count > 0) && (

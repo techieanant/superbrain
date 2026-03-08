@@ -295,6 +295,19 @@ class ApiService {
     }
   }
 
+  async getNgrokUrl(): Promise<string | null> {
+    try {
+      const baseUrl = await this.getBaseUrl();
+      if (!baseUrl) return null;
+      
+      const response = await fetch(`${baseUrl}/ngrok-url`);
+      const data = await response.json();
+      return data.ngrok_url || null;
+    } catch {
+      return null;
+    }
+  }
+
   async getRetryQueue(): Promise<RetryQueueItem[]> {
     try {
       const headers = await this.getHeaders();
