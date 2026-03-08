@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperBrain Setup</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card-bg: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --primary: #58a6ff;
+            --primary-hover: #79c0ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --error: #f85149;
+            --cyan: #56d4dd;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, var(--cyan), var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="email"],
+        select {
+            width: 100%;
+            padding: 0.6rem 0.8rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.3rem;
+        }
+
+        .hint a {
+            color: var(--cyan);
+            text-decoration: none;
+        }
+
+        .hint a:hover {
+            text-decoration: underline;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.7rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: var(--border);
+            color: var(--text);
+        }
+
+        .btn-secondary:hover {
+            background: #3d444d;
+        }
+
+        .btn-block {
+            width: 100%;
+            text-align: center;
+        }
+
+        .section-actions {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .alert {
+            padding: 0.8rem 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .alert-success {
+            background: rgba(63, 185, 80, 0.15);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .alert-error {
+            background: rgba(248, 81, 73, 0.15);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .alert-warning {
+            background: rgba(210, 153, 34, 0.15);
+            border: 1px solid var(--warning);
+            color: var(--warning);
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .step-num {
+            background: var(--border);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #setupComplete {
+            display: none;
+        }
+
+        .api-key-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-left: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .status-valid { color: var(--success); }
+        .status-invalid { color: var(--error); }
+        .status-unknown { color: var(--warning); }
+
+        .token-display {
+            background: var(--bg);
+            padding: 0.8rem;
+            border-radius: 6px;
+            font-family: monospace;
+            word-break: break-all;
+            margin-top: 0.5rem;
+        }
+
+        .progress-steps {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .progress-step {
+            flex: 1;
+            min-width: 100px;
+            padding: 0.5rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .progress-step.active {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .progress-step.completed {
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .provider-option {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 0.5rem;
+        }
+
+        .provider-option:hover {
+            border-color: var(--primary);
+        }
+
+        .provider-option.selected {
+            border-color: var(--primary);
+            background: rgba(88, 166, 255, 0.1);
+        }
+
+        .provider-option input[type="radio"] {
+            accent-color: var(--primary);
+        }
+
+        .provider-details {
+            padding: 1rem;
+            background: var(--bg);
+            border-radius: 6px;
+            margin-top: 1rem;
+        }
+
+        .provider-sub-options {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SuperBrain</h1>
+            <p class="subtitle">Configuration Setup</p>
+        </header>
+
+        <div id="messageArea"></div>
+
+        <div id="setupForm">
+            <div class="progress-steps">
+                <div class="progress-step active" data-step="1">1. AI Provider</div>
+                <div class="progress-step" data-step="2">2. Instagram</div>
+                <div class="progress-step" data-step="3">3. Whisper</div>
+                <div class="progress-step" data-step="4">4. ngrok</div>
+                <div class="progress-step" data-step="5">5. Token</div>
+            </div>
+
+            <form id="configForm">
+                <div class="card" id="step1">
+                    <h2>AI Provider</h2>
+                    <p class="hint" style="margin-bottom: 1rem;">
+                        Select one AI provider. Configure only one at a time.
+                    </p>
+
+                    <label class="provider-option" id="providerApiKeyOption">
+                        <input type="radio" name="providerType" value="api_key" checked>
+                        <span><strong>API Key Provider</strong> - Use cloud AI with your API key</span>
+                    </label>
+                    <div id="apiKeyProviderDetails" class="provider-details">
+                        <div class="form-group">
+                            <label>Select Provider</label>
+                            <select id="apiProvider">
+                                <option value="gemini">Google Gemini (Recommended - 1500 req/day free)</option>
+                                <option value="groq">Groq</option>
+                                <option value="openrouter">OpenRouter</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="text" id="apiKey" placeholder="Enter API key">
+                        </div>
+                        <p class="hint">
+                            Get free keys: 
+                            <a href="https://aistudio.google.com/apikey" target="_blank">Gemini</a>,
+                            <a href="https://console.groq.com/keys" target="_blank">Groq</a>,
+                            <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a>
+                        </p>
+                    </div>
+
+                    <label class="provider-option" id="providerOllamaOption">
+                        <input type="radio" name="providerType" value="ollama">
+                        <span><strong>Ollama</strong> - Run AI locally (offline)</span>
+                    </label>
+                    <div id="ollamaProviderDetails" class="provider-details" style="display: none;">
+                        <p class="hint" style="margin-bottom: 1rem;">
+                            Runs AI locally on your machine - no internet or API key required.
+                            <br>Install Ollama from <a href="https://ollama.com" target="_blank">ollama.com</a>
+                        </p>
+                        <div class="form-group">
+                            <label>Ollama Base URL</label>
+                            <input type="text" id="ollamaUrl" placeholder="http://localhost:11434" value="http://localhost:11434">
+                        </div>
+                        <div class="form-group">
+                            <label>Model</label>
+                            <select id="ollamaModel">
+                                <option value="qwen2.5vl:3b">qwen2.5vl:3b (~2 GB, vision-capable)</option>
+                                <option value="llama3.2:3b">llama3.2:3b (~2 GB)</option>
+                                <option value="gemma2:2b">gemma2:2b (~1.5 GB)</option>
+                                <option value="llama3.1:8b">llama3.1:8b (~5 GB)</option>
+                                <option value="custom">Custom model name...</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="customOllamaModelGroup" style="display: none;">
+                            <label>Custom Model Name</label>
+                            <input type="text" id="customOllamaModel" placeholder="e.g., llama3.2:3b">
+                        </div>
+                    </div>
+
+                    <label class="provider-option" id="providerCustomOption">
+                        <input type="radio" name="providerType" value="custom">
+                        <span><strong>Custom Provider</strong> - Use any OpenAI-compatible API</span>
+                    </label>
+                    <div id="customProviderDetails" class="provider-details" style="display: none;">
+                        <p class="hint" style="margin-bottom: 1rem;">
+                            Connect to any OpenAI-compatible API (local or hosted).
+                        </p>
+                        <div class="form-group">
+                            <label>Base URL</label>
+                            <input type="text" id="customBaseUrl" placeholder="e.g., http://localhost:8000/v1 or https://api.openai.com/v1">
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="text" id="customApiKey" placeholder="Enter API key (or leave empty for local)">
+                        </div>
+                        <div class="form-group">
+                            <label>Model Name</label>
+                            <input type="text" id="customModel" placeholder="e.g., gpt-4o, llama3, etc.">
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning" id="noProviderWarning" style="display: none; margin-top: 1rem;">
+                        Please configure at least one AI provider.
+                    </div>
+                </div>
+
+                <div class="card" id="step2">
+                    <h2>Instagram Account</h2>
+                    <p class="hint" style="margin-bottom: 1rem;">
+                        Use a secondary/burner account — NOT your main account.
+                        Skip this step to only analyze YouTube &amp; Websites.
+                    </p>
+
+                    <div id="igStatus" style="margin-bottom: 1rem; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; background: rgba(248,81,73,0.12); border: 1px solid var(--error); color: var(--error);">
+                        Not connected
+                    </div>
+
+                    <div id="igLoginForm">
+                        <div class="form-group">
+                            <label>Instagram Username</label>
+                            <input type="text" id="igUsername" placeholder="Enter username (without @)">
+                        </div>
+                        <div class="form-group">
+                            <label>Instagram Password</label>
+                            <input type="password" id="igPassword" placeholder="Enter password">
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="igConnectBtn" style="margin-top: 0.25rem;">
+                            Connect Instagram
+                        </button>
+                    </div>
+
+                    <div id="ig2faForm" style="display:none; margin-top: 1rem;">
+                        <div class="form-group">
+                            <label>Two-Factor Authentication Code</label>
+                            <input type="text" id="ig2faCode" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="ig2faBtn">Verify Code</button>
+                    </div>
+                </div>
+
+                <div class="card" id="step3">
+                    <h2>Whisper Audio Transcription</h2>
+                    <p class="hint" style="margin-bottom: 1rem;">
+                        Transcribes audio locally. Requires ffmpeg to be installed.
+                    </p>
+
+                    <div class="checkbox-group" style="margin-bottom: 1rem;">
+                        <input type="checkbox" id="enableWhisper" checked>
+                        <label for="enableWhisper">Enable Whisper transcription</label>
+                    </div>
+
+                    <div class="form-group" id="whisperModelGroup">
+                        <label>Whisper Model</label>
+                        <select id="whisperModel">
+                            <option value="base">base (~142 MB, recommended)</option>
+                            <option value="tiny">tiny (~74 MB, fastest)</option>
+                            <option value="small">small (~461 MB)</option>
+                            <option value="medium">medium (~1.5 GB)</option>
+                            <option value="large">large (~2.9 GB, best accuracy)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="card" id="step4">
+                    <h2>ngrok Remote Access</h2>
+                    <p class="hint" style="margin-bottom: 1rem;">
+                        Creates a public HTTPS URL to access SuperBrain from your phone.
+                        Get your authtoken from <a href="https://dashboard.ngrok.com/get-started/your-authtoken" target="_blank">ngrok dashboard</a>.
+                    </p>
+
+                    <div class="checkbox-group" style="margin-bottom: 1rem;">
+                        <input type="checkbox" id="enableNgrok">
+                        <label for="enableNgrok">Configure ngrok</label>
+                    </div>
+
+                    <div class="form-group" id="ngrokTokenGroup" style="display: none;">
+                        <label>ngrok Authtoken</label>
+                        <input type="text" id="ngrokToken" placeholder="Enter ngrok authtoken">
+                    </div>
+                </div>
+
+                <div class="card" id="step5">
+                    <h2>API Token</h2>
+                    <p class="hint" style="margin-bottom: 1rem;">
+                        This token is used to authenticate with the SuperBrain API.
+                    </p>
+
+                    <div class="form-group">
+                        <label>Current API Token</label>
+                        <div class="token-display" id="currentToken">Loading...</div>
+                        <button type="button" class="btn btn-secondary" style="margin-top: 0.5rem;" id="regenerateTokenBtn">
+                            Regenerate Token
+                        </button>
+                    </div>
+                </div>
+
+                <div class="section-actions">
+                    <button type="submit" class="btn btn-primary btn-block" id="saveBtn">
+                        Save Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="setupComplete" class="card">
+            <h2 style="color: var(--success);">Setup Complete!</h2>
+            <p>SuperBrain is now configured and ready to use.</p>
+            <p class="hint" style="margin-top: 1rem;">
+                Server URL: <strong id="serverUrl">http://localhost:5000</strong>
+            </p>
+            <p class="hint">
+                API Token: <strong id="serverToken"></strong>
+            </p>
+            
+            <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                <h3 style="color: var(--primary); margin-bottom: 1rem;">Test Your Setup</h3>
+                <div class="form-group">
+                    <label>Enter a URL to analyze (Instagram, YouTube, or any website)</label>
+                    <input type="text" id="testUrl" placeholder="https://instagram.com/p/...">
+                </div>
+                <button type="button" class="btn btn-primary" id="testBtn">Analyze</button>
+                <div id="testResult" style="margin-top: 1rem; display: none;">
+                    <div class="token-display" id="testResultContent" style="max-height: 300px; overflow-y: auto; white-space: pre-wrap;"></div>
+                </div>
+            </div>
+            
+            <div class="section-actions" style="margin-top: 1.5rem;">
+                <a href="/docs" class="btn btn-secondary">API Docs</a>
+                <button class="btn btn-secondary" id="editConfigBtn">Edit Configuration</button>
+            </div>
+        </div>
+        
+        <div id="editConfigSection" style="display: none;">
+            <div class="card">
+                <h2 style="color: var(--primary);">Edit Configuration</h2>
+                <p>Update your SuperBrain settings below.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        function showMessage(msg, type = 'success') {
+            const area = document.getElementById('messageArea');
+            area.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+            setTimeout(() => area.innerHTML = '', 5000);
+        }
+
+        function setLoading(loading) {
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = loading;
+            btn.innerHTML = loading ? '<span class="spinner"></span>Saving...' : 'Save Configuration';
+        }
+
+        function updateStepIndicators(step) {
+            document.querySelectorAll('.progress-step').forEach((el, i) => {
+                el.classList.remove('active', 'completed');
+                if (i + 1 < step) el.classList.add('completed');
+                if (i + 1 === step) el.classList.add('active');
+            });
+        }
+
+        function updateProviderUI() {
+            const providerType = document.querySelector('input[name="providerType"]:checked').value;
+            
+            document.getElementById('apiKeyProviderDetails').style.display = providerType === 'api_key' ? 'block' : 'none';
+            document.getElementById('ollamaProviderDetails').style.display = providerType === 'ollama' ? 'block' : 'none';
+            document.getElementById('customProviderDetails').style.display = providerType === 'custom' ? 'block' : 'none';
+            
+            document.getElementById('providerApiKeyOption').classList.toggle('selected', providerType === 'api_key');
+            document.getElementById('providerOllamaOption').classList.toggle('selected', providerType === 'ollama');
+            document.getElementById('providerCustomOption').classList.toggle('selected', providerType === 'custom');
+        }
+
+        document.querySelectorAll('input[name="providerType"]').forEach(radio => {
+            radio.addEventListener('change', updateProviderUI);
+        });
+
+        document.getElementById('enableNgrok').addEventListener('change', function() {
+            document.getElementById('ngrokTokenGroup').style.display = this.checked ? 'block' : 'none';
+        });
+
+        document.getElementById('ollamaModel').addEventListener('change', function() {
+            document.getElementById('customOllamaModelGroup').style.display = this.value === 'custom' ? 'block' : 'none';
+        });
+
+        async function loadConfig() {
+            try {
+                const res = await fetch(`${API_BASE}/config`);
+                const data = await res.json();
+
+                const providerType = data.ai_provider_type || 'api_key';
+                document.querySelector(`input[name="providerType"][value="${providerType}"]`).checked = true;
+                updateProviderUI();
+
+                if (providerType === 'api_key') {
+                    document.getElementById('apiProvider').value = data.api_provider || 'gemini';
+                    document.getElementById('apiKey').value = data.api_key || '';
+                } else if (providerType === 'ollama') {
+                    if (data.ollama_model && !['qwen2.5vl:3b', 'llama3.2:3b', 'gemma2:2b', 'llama3.1:8b'].includes(data.ollama_model)) {
+                        document.getElementById('ollamaModel').value = 'custom';
+                        document.getElementById('customOllamaModel').value = data.ollama_model;
+                        document.getElementById('customOllamaModelGroup').style.display = 'block';
+                    } else {
+                        document.getElementById('ollamaModel').value = data.ollama_model || 'qwen2.5vl:3b';
+                    }
+                    document.getElementById('ollamaUrl').value = data.ollama_url || 'http://localhost:11434';
+                } else if (providerType === 'custom') {
+                    document.getElementById('customBaseUrl').value = data.custom_base_url || '';
+                    document.getElementById('customApiKey').value = data.custom_api_key || '';
+                    document.getElementById('customModel').value = data.custom_model || '';
+                }
+
+                document.getElementById('igUsername').value = data.ig_username || '';
+                document.getElementById('igPassword').value = '';  // never pre-fill password
+                document.getElementById('ngrokToken').value = data.ngrok_token || '';
+                // Restore Instagram status badge from config (username known = probably connected)
+                if (data.ig_username) {
+                    loadIgStatus();
+                }
+
+                if (data.whisper_model) {
+                    document.getElementById('whisperModel').value = data.whisper_model;
+                }
+
+                document.getElementById('enableWhisper').checked = data.whisper_model !== null;
+                document.getElementById('whisperModelGroup').style.display = data.whisper_model !== null ? 'block' : 'none';
+
+                document.getElementById('enableNgrok').checked = !!data.ngrok_token;
+                document.getElementById('ngrokTokenGroup').style.display = data.ngrok_token ? 'block' : 'none';
+
+            } catch (e) {
+                console.error('Failed to load config:', e);
+            }
+        }
+
+        async function loadToken() {
+            try {
+                const res = await fetch(`${API_BASE}/config`);
+                const data = await res.json();
+                document.getElementById('currentToken').textContent = data.token || 'Not set';
+                document.getElementById('serverToken').textContent = data.token || 'Not set';
+            } catch (e) {
+                document.getElementById('currentToken').textContent = 'Error loading';
+            }
+        }
+
+        async function checkSetupStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/setup-status`);
+                const data = await res.json();
+
+                if (data.setup_complete) {
+                    document.getElementById('setupForm').style.display = 'none';
+                    document.getElementById('setupComplete').style.display = 'block';
+                    document.getElementById('serverUrl').textContent = window.location.origin;
+                    loadToken();
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        document.getElementById('configForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const providerType = document.querySelector('input[name="providerType"]:checked').value;
+            
+            let aiProviderConfig = {};
+            
+            if (providerType === 'api_key') {
+                aiProviderConfig = {
+                    api_provider: document.getElementById('apiProvider').value,
+                    api_key: document.getElementById('apiKey').value.trim()
+                };
+            } else if (providerType === 'ollama') {
+                let model = document.getElementById('ollamaModel').value;
+                if (model === 'custom') {
+                    model = document.getElementById('customOllamaModel').value.trim();
+                }
+                aiProviderConfig = {
+                    ollama_url: document.getElementById('ollamaUrl').value.trim(),
+                    ollama_model: model
+                };
+            } else if (providerType === 'custom') {
+                aiProviderConfig = {
+                    custom_base_url: document.getElementById('customBaseUrl').value.trim(),
+                    custom_api_key: document.getElementById('customApiKey').value.trim(),
+                    custom_model: document.getElementById('customModel').value.trim()
+                };
+            }
+
+            const config = {
+                ai_provider_type: providerType,
+                ...aiProviderConfig,
+                ig_username: document.getElementById('igUsername').value.trim(),
+                ig_password: '',  // password saved via /instagram/login, not here
+                whisper_model: document.getElementById('enableWhisper').checked ? 
+                    document.getElementById('whisperModel').value : null,
+                ngrok_token: document.getElementById('enableNgrok').checked ? 
+                    document.getElementById('ngrokToken').value.trim() : null
+            };
+
+            const hasAIProvider = 
+                (providerType === 'api_key' && config.api_key) ||
+                (providerType === 'ollama' && config.ollama_model) ||
+                (providerType === 'custom' && config.custom_base_url && config.custom_model);
+            
+            if (!hasAIProvider) {
+                showMessage('Please configure at least one AI provider', 'error');
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const res = await fetch(`${API_BASE}/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (!res.ok) throw new Error('Failed to save config');
+
+                await fetch(`${API_BASE}/setup-complete`, { method: 'POST' });
+
+                showMessage('Configuration saved successfully!', 'success');
+                
+                document.getElementById('setupComplete').style.display = 'block';
+                document.getElementById('setupForm').style.display = 'none';
+                await loadToken();
+                
+                document.getElementById('serverUrl').textContent = window.location.origin;
+
+            } catch (e) {
+                showMessage('Error saving configuration: ' + e.message, 'error');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        document.getElementById('regenerateTokenBtn').addEventListener('click', async function() {
+            if (!confirm('Are you sure you want to regenerate the API token? This will break existing connections.')) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/regenerate-token`, { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('currentToken').textContent = data.token;
+                showMessage('Token regenerated!', 'success');
+            } catch (e) {
+                showMessage('Error regenerating token', 'error');
+            }
+        });
+
+        // ── Instagram login helpers ──────────────────────────────────────────
+
+        function setIgStatus(connected, username) {
+            const el = document.getElementById('igStatus');
+            if (connected) {
+                el.style.background = 'rgba(63,185,80,0.12)';
+                el.style.border = '1px solid var(--success)';
+                el.style.color = 'var(--success)';
+                el.textContent = `Connected as @${username}`;
+            } else {
+                el.style.background = 'rgba(248,81,73,0.12)';
+                el.style.border = '1px solid var(--error)';
+                el.style.color = 'var(--error)';
+                el.textContent = 'Not connected';
+            }
+        }
+
+        async function loadIgStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/instagram/status`);
+                const data = await res.json();
+                setIgStatus(data.connected, data.username);
+            } catch(e) { /* ignore */ }
+        }
+
+        document.getElementById('igConnectBtn').addEventListener('click', async function() {
+            const username = document.getElementById('igUsername').value.trim().replace(/^@/, '');
+            const password = document.getElementById('igPassword').value;
+            if (!username || !password) {
+                showMessage('Please enter your Instagram username and password', 'error');
+                return;
+            }
+            const btn = document.getElementById('igConnectBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Connecting...';
+            try {
+                const res = await fetch(`${API_BASE}/instagram/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    setIgStatus(true, username);
+                    document.getElementById('ig2faForm').style.display = 'none';
+                    showMessage(data.message || 'Instagram connected!', 'success');
+                } else if (data.needs_2fa) {
+                    document.getElementById('ig2faForm').style.display = 'block';
+                    showMessage('2FA required — check your authenticator app', 'warning');
+                } else {
+                    showMessage(data.error || 'Login failed', 'error');
+                }
+            } catch(e) {
+                showMessage('Connection error: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Connect Instagram';
+            }
+        });
+
+        document.getElementById('ig2faBtn').addEventListener('click', async function() {
+            const code = document.getElementById('ig2faCode').value.trim();
+            if (!code) { showMessage('Please enter your 2FA code', 'error'); return; }
+            const btn = document.getElementById('ig2faBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Verifying...';
+            try {
+                const res = await fetch(`${API_BASE}/instagram/login/2fa`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const username = document.getElementById('igUsername').value.trim().replace(/^@/, '');
+                    setIgStatus(true, username);
+                    document.getElementById('ig2faForm').style.display = 'none';
+                    showMessage(data.message || 'Instagram connected!', 'success');
+                } else {
+                    showMessage(data.error || '2FA verification failed', 'error');
+                }
+            } catch(e) {
+                showMessage('Error: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Verify Code';
+            }
+        });
+
+        // ────────────────────────────────────────────────────────────────────
+
+        document.querySelectorAll('.progress-step').forEach(step => {
+            step.addEventListener('click', function() {
+                const stepNum = this.dataset.step;
+                const targetId = stepNum <= 5 ? `step${stepNum}` : 'step6';
+                document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth' });
+            });
+        });
+
+        document.getElementById('testBtn').addEventListener('click', async function() {
+            const url = document.getElementById('testUrl').value.trim();
+            if (!url) {
+                showMessage('Please enter a URL to test', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('testBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Analyzing...';
+            
+            const resultDiv = document.getElementById('testResult');
+            const resultContent = document.getElementById('testResultContent');
+            resultDiv.style.display = 'none';
+            
+            try {
+                const configRes = await fetch(`${API_BASE}/config`);
+                const config = await configRes.json();
+                
+                const res = await fetch(`${API_BASE}/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': config.token
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+                
+                const data = await res.json();
+                resultContent.textContent = JSON.stringify(data, null, 2);
+                resultDiv.style.display = 'block';
+                
+                if (res.ok) {
+                    showMessage('Analysis completed!', 'success');
+                } else {
+                    showMessage('Analysis failed: ' + (data.detail || 'Unknown error'), 'error');
+                }
+            } catch (e) {
+                resultContent.textContent = 'Error: ' + e.message;
+                resultDiv.style.display = 'block';
+                showMessage('Error testing: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Analyze';
+            }
+        });
+
+        document.getElementById('editConfigBtn').addEventListener('click', async function() {
+            document.getElementById('setupComplete').style.display = 'none';
+            document.getElementById('setupForm').style.display = 'block';
+            await loadConfig();
+            await loadToken();
+        });
+
+        async function init() {
+            await checkSetupStatus();
+            await loadConfig();
+            await loadToken();
+            document.getElementById('serverUrl').textContent = window.location.origin;
+        }
+
+        init();
+    </script>
+</body>
+</html>
