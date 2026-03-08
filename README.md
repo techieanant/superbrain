@@ -219,14 +219,14 @@ Free AI APIs have rate limits, downtime, and variable speed. SuperBrain solves t
 The Docker setup uses a volume mount for config persistence:
 
 ```bash
-# Build
-docker build -t superbrain .
+# Pull pre-built image
+docker pull ghcr.io/techieanant/superbrain:latest
 
 # Run with config persistence
 docker run -d --name superbrain \
   -p 5001:5000 \
   -v $(pwd)/backend/config:/app/backend/config \
-  superbrain
+  ghcr.io/techieanant/superbrain:latest
 
 # Access UI
 open http://localhost:5001/setup
@@ -263,13 +263,13 @@ open http://localhost:5001/setup
 git clone https://github.com/sidinsearch/superbrain.git
 cd superbrain
 
-# 2. Build the Docker image
-docker build -t superbrain .
+# 2. Pull pre-built image
+docker pull ghcr.io/techieanant/superbrain:latest
 
 # 3. Run the container
 #    - Config persists at ./backend/config on your host
 #    - Edit ./backend/config/.api_keys before running to configure providers
-docker run -d --name superbrain -p 5001:5000 -v $(pwd)/backend/config:/app/backend/config superbrain
+docker run -d --name superbrain -p 5001:5000 -v $(pwd)/backend/config:/app/backend/config ghcr.io/techieanant/superbrain:latest
 
 # 4. Access the setup UI
 #    Open http://localhost:5001/setup in your browser
