@@ -308,6 +308,35 @@ class ApiService {
     }
   }
 
+  async getNgrokToken(): Promise<{ token: string; configured: boolean }> {
+    try {
+      const baseUrl = await this.getBaseUrl();
+      if (!baseUrl) return { token: '', configured: false };
+      
+      const response = await fetch(`${baseUrl}/ngrok-token`);
+      return await response.json();
+    } catch {
+      return { token: '', configured: false };
+    }
+  }
+
+  async saveNgrokToken(token: string): Promise<boolean> {
+    try {
+      const baseUrl = await this.getBaseUrl();
+      if (!baseUrl) return false;
+      
+      const response = await fetch(`${baseUrl}/ngrok-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await response.json();
+      return data.success === true;
+    } catch {
+      return false;
+    }
+  }
+
   async getRetryQueue(): Promise<RetryQueueItem[]> {
     try {
       const headers = await this.getHeaders();

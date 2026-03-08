@@ -256,6 +256,34 @@ async def regenerate_token():
     return {"token": new_token}
 
 
+@app.post("/ngrok-token", include_in_schema=False)
+async def save_ngrok_token(body: dict):
+    """Save the ngrok token and optionally restart ngrok."""
+    token = body.get("token", "").strip()
+    
+    # Save to config file
+    keys = load_api_keys()
+    keys["ngrok_token"] = token
+    save_api_keys(keys)
+    
+    # Also save to ngrok_token.txt for docker-entrypoint.sh
+    NGROK_TOKEN_FILE = CONFIG_DIR / "ngrok_token.txt"
+    NGROK_TOKEN_FILE.write_text(token)
+    
+    return {"success": True, "token": token}
+
+
+@app.get("/ngrok-token", include_in_schema=False)
+async def get_ngrok_token():
+    """Get the current ngrok token (masked)."""
+    keys = load_api_keys()
+    token = keys.get("ngrok_token", "")
+    return {
+        "token": token,
+        "configured": bool(token)
+    }
+
+
 # ── Instagram login state (holds instaloader instance between /login and /2fa) ──
 _ig_login_state: dict = {}
 _ig_login_lock = threading.Lock()

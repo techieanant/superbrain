@@ -25,6 +25,8 @@ const SettingsScreen = () => {
   const [apiToken, setApiToken] = useState('');
   const [apiUrl, setApiUrl] = useState('');
   const [ngrokUrl, setNgrokUrl] = useState<string | null>(null);
+  const [ngrokToken, setNgrokToken] = useState('');
+  const [ngrokConfigured, setNgrokConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'testing'>('disconnected');
@@ -51,6 +53,11 @@ const SettingsScreen = () => {
         apiService.getQueueStatus().then(s => setQueueStatus(s)).catch(() => {});
         // Load ngrok URL in background
         apiService.getNgrokUrl().then(url => setNgrokUrl(url)).catch(() => {});
+        // Load ngrok token status
+        apiService.getNgrokToken().then(t => {
+          setNgrokToken(t.token);
+          setNgrokConfigured(t.configured);
+        }).catch(() => {});
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -150,6 +157,20 @@ const SettingsScreen = () => {
       setToast({ visible: true, message: 'Failed to flush retry queue', type: 'error' });
     } finally {
       setFlushingRetry(false);
+    }
+  };
+
+  const handleSaveNgrokToken = async () => {
+    try {
+      const success = await apiService.saveNgrokToken(ngrokToken);
+      if (success) {
+        setNgrokConfigured(true);
+        setToast({ visible: true, message: 'Ngrok token saved! Restart server to apply.', type: 'success' });
+      } else {
+        setToast({ visible: true, message: 'Failed to save ngrok token', type: 'error' });
+      }
+    } catch {
+      setToast({ visible: true, message: 'Failed to save ngrok token', type: 'error' });
     }
   };
 
@@ -265,6 +286,42 @@ const SettingsScreen = () => {
               <Text style={styles.saveButtonText}>Save Configuration</Text>
             )}
           </TouchableOpacity>
+        </View>
+
+        {/* Ngrok Configuration */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🌐 Ngrok Remote Access</Text>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Ngrok Token</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your ngrok authtoken"
+              placeholderTextColor={colors.textMuted}
+              value={ngrokToken}
+              onChangeText={setNgrokToken}
+              autoCapitalize="none"
+              secureTextEntry
+            />
+            <Text style={styles.inputHint}>
+              Get from: dashboard.ngrok.com/get-started/your-authtoken
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.saveButton, ngrokConfigured && { backgroundColor: colors.success }]}
+            onPress={handleSaveNgrokToken}
+          >
+            <Text style={styles.saveButtonText}>
+              {ngrokConfigured ? 'Update Ngrok Token' : 'Save Ngrok Token'}
+            </Text>
+          </TouchableOpacity>
+
+          {ngrokConfigured && (
+            <Text style={{ color: colors.success, fontSize: 12, marginTop: 8 }}>
+              ✓ Ngrok token configured. Restart server to apply.
+            </Text>
+          )}
         </View>
 
         {/* Retry Queue — only shown when there are stuck items */}
