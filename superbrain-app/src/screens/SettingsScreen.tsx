@@ -60,10 +60,18 @@ const SettingsScreen = () => {
     try {
       setTesting(true);
       setConnectionStatus('testing');
-      const isConnected = await apiService.testConnection();
-      setConnectionStatus(isConnected ? 'connected' : 'disconnected');
-      return isConnected;
-    } catch (error) {
+      
+      // Get the URL being used
+      const baseUrl = await apiService.getBaseUrl();
+      console.log('[Settings] Testing connection to:', baseUrl);
+      
+      const result = await apiService.testConnection();
+      console.log('[Settings] Connection result:', result);
+      
+      setConnectionStatus(result.success ? 'connected' : 'disconnected');
+      return result.success;
+    } catch (error: any) {
+      console.log('[Settings] Connection error:', error.message);
       setConnectionStatus('disconnected');
       return false;
     } finally {
@@ -72,6 +80,8 @@ const SettingsScreen = () => {
   };
 
   const handleSave = async () => {
+    const url = apiUrl.trim() || 'http://192.168.137.1:5000';
+    
     if (!apiToken.trim()) {
       setToast({ visible: true, message: 'Please enter an API token', type: 'warning' });
       return;
@@ -80,7 +90,9 @@ const SettingsScreen = () => {
     try {
       setLoading(true);
       await apiService.setApiToken(apiToken.trim());
-      await apiService.setApiUrl(apiUrl.trim() || 'http://192.168.137.1:5000');
+      await apiService.setApiUrl(url);
+      
+      console.log('[Settings] Saving with URL:', url);
       
       // Test connection
       const connected = await testConnection();
@@ -90,7 +102,7 @@ const SettingsScreen = () => {
         apiService.getQueueStatus().then(s => setQueueStatus(s)).catch(() => {});
         setToast({ visible: true, message: 'Configuration saved and connected!', type: 'success' });
       } else {
-        setToast({ visible: true, message: 'Saved but could not connect to server', type: 'warning' });
+        setToast({ visible: true, message: `Saved but could not connect to ${url}`, type: 'warning' });
       }
     } catch (error) {
       setToast({ visible: true, message: 'Failed to save settings', type: 'error' });

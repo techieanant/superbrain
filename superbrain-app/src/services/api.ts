@@ -14,7 +14,7 @@ function normalizePost(p: any): Post {
 
 class ApiService {
   private apiToken: string | null = null;
-  private apiUrl: string = 'http://192.168.31.205:5000'; // Laptop hotspot IP
+  private apiUrl: string = ''; // Will be set from storage or use default
 
   async initialize() {
     this.apiToken = await AsyncStorage.getItem('apiToken');
@@ -46,7 +46,7 @@ class ApiService {
     if (savedUrl) {
       this.apiUrl = savedUrl;
     }
-    return this.apiUrl;
+    return this.apiUrl || '';
   }
 
   private async getHeaders() {
@@ -147,14 +147,11 @@ class ApiService {
     try {
       const headers = await this.getHeaders();
       const baseUrl = await this.getBaseUrl();
-      console.log('API - Analyzing URL:', url);
       const response = await axios.post<ApiResponse>(
         `${baseUrl}/analyze`,
         { url },
         { headers }
       );
-      
-      console.log('API - Response:', response.data);
       
       if (response.data.success && response.data.data) {
         return normalizePost(response.data.data);
@@ -162,8 +159,6 @@ class ApiService {
       
       throw new Error('Failed to analyze post');
     } catch (error: any) {
-      console.error('Error analyzing URL:', error.response?.data || error.message);
-      // 202 = quota exhausted, queued for automatic retry
       if (error.response?.status === 202) {
         const err = new Error('QUEUED_FOR_RETRY') as any;
         err.isRetryQueued = true;
@@ -268,30 +263,35 @@ class ApiService {
     try {
       const headers = await this.getHeaders();
       const baseUrl = await this.getBaseUrl();
-      console.log(`Fetching stats from ${baseUrl}/stats`);
       const response = await axios.get<{ success: boolean; data: DatabaseStats }>(
         `${baseUrl}/stats`,
         { headers }
       );
-      console.log('Stats fetched:', response.data.data);
       return response.data.data;
     } catch (error: any) {
-      console.error('Error fetching stats:', error.response?.status, error.response?.data || error.message);
       return null;
     }
   }
 
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<{ success: boolean; error?: string; url?: string }> {
     try {
       const baseUrl = await this.getBaseUrl();
-      // Use /ping — no auth, no DB, instant response even while backend is analyzing
-      const response = await axios.get(
-        `${baseUrl}/ping`,
-        { timeout: 8000 }
-      );
-      return response.status === 200;
-    } catch (error) {
-      return false;
+      
+      if (!baseUrl) {
+        return { success: false, error: 'No URL configured. Please enter Server URL in Settings.', url: baseUrl };
+      }
+      
+      const response = await fetch(`${baseUrl}/ping`, {
+        method: 'GET',
+      });
+      
+      if (response.status === 200) {
+        return { success: true, url: baseUrl };
+      }
+      return { success: false, error: `Server returned status ${response.status}`, url: baseUrl };
+    } catch (error: any) {
+      const baseUrl = await this.getBaseUrl();
+      return { success: false, error: error.message, url: baseUrl };
     }
   }
 

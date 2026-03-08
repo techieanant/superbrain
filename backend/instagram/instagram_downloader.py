@@ -42,8 +42,9 @@ except ImportError:
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BACKEND_DIR     = pathlib.Path(__file__).parent.parent
 TEMP_DIR        = BACKEND_DIR / "temp"
-IL_SESSION_FILE = BACKEND_DIR / ".instaloader_session"
-API_KEYS_FILE   = BACKEND_DIR / ".api_keys"
+CONFIG_DIR      = BACKEND_DIR / "config"
+IL_SESSION_FILE = CONFIG_DIR / ".instaloader_session"
+API_KEYS_FILE   = CONFIG_DIR / ".api_keys"
 
 
 # ── Credential loader ─────────────────────────────────────────────────────────
@@ -113,13 +114,124 @@ def download_instagram_content(url: str) -> str | None:
     """
     TEMP_DIR.mkdir(exist_ok=True)
 
-    if INSTALOADER_AVAILABLE:
-        return _download_via_instaloader(url)
+    # Note: Link validator sets Facebook reels to "instagram" pipeline
+    if "facebook.com" in url or "fb.watch" in url:
+        return _download_via_ytdlp(url)
 
-    print("✗ instaloader is not installed. Run: pip install instaloader")
+    if INSTALOADER_AVAILABLE:
+        try:
+            return _download_via_instaloader(url)
+        except Exception as e:
+            print(f"  ⚠ instaloader failed ({str(e)}). Falling back to yt-dlp...")
+            # Fall back to yt-dlp on non-instaloader recoverable errors
+            # (or if instaloader throws a non-RetryableDownloadError generic exception)
+
+    # Ultimate fallback for Instagram if instaloader is missing or failed
+    import shutil
+    if shutil.which("yt-dlp"):
+        return _download_via_ytdlp(url)
+
+    print("✗ No viable download method available.")
     return None
 
+def _download_via_ytdlp(url: str) -> str | None:
+    """Download generic social video using yt-dlp directly."""
+    import subprocess
+    import shutil
+    import hashlib
 
+    print(f"  Fetching using yt-dlp: {url}")
+    if not shutil.which("yt-dlp"):
+        print("  ✗ yt-dlp is not installed!")
+        return None
+
+    # Create folder name from URL hash
+    clean_url = url.split("?")[0]
+    folder_name = hashlib.md5(clean_url.encode()).hexdigest()[:12]
+    folder = _unique_folder(TEMP_DIR, folder_name)
+
+    # yt-dlp options: download video + thumbnail + metadata as JSON
+    video_path_tmpl = str(folder / f"{folder_name}.%(ext)s")
+    
+    cmd = [
+        "yt-dlp",
+        "--format", "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
+        "--merge-output-format", "mp4",
+        "--write-info-json",
+        "--write-thumbnail",
+        "--no-warnings",
+        "-o", video_path_tmpl,
+        url
+    ]
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if proc.returncode != 0:
+            print(f"  ✗ yt-dlp error: {proc.stderr}")
+            return None
+
+        # Post process downloaded files
+        # Check if mp4 exists
+        mp4_files = list(folder.glob("*.mp4"))
+        if not mp4_files:
+            # yt-dlp might have saved it as mkv or webm despite requesting mp4
+            mkv_files = list(folder.glob("*.mkv")) + list(folder.glob("*.webm"))
+            if not mkv_files:
+                print("  ✗ yt-dlp failed to produce any video file.")
+                return None
+            video_file = mkv_files[0]
+            # Rename or use as is
+            dest = folder / f"{folder_name}.mp4"
+            shutil.move(str(video_file), str(dest))
+            video_file = dest
+        else:
+            video_file = mp4_files[0]
+
+        # Extract audio for whisper
+        extract_audio_from_video(
+            str(video_file),
+            str(folder / f"{folder_name}_audio.mp3")
+        )
+
+        # Convert yt-dlp info.json to info.txt used by main.py
+        import json
+        info_files = list(folder.glob("*.info.json"))
+        if info_files:
+            try:
+                with open(info_files[0], "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                
+                info_txt = folder / "info.txt"
+                with open(info_txt, "w", encoding="utf-8") as f:
+                    # Write in the format main.py expects:
+                    # Username: @xx
+                    # Likes: 123
+                    # Date: 2024-01-01
+                    username = meta.get("uploader") or meta.get("channel") or "Unknown"
+                    likes = meta.get("like_count", 0)
+                    date_str = meta.get("upload_date", "")
+                    if date_str and len(date_str) == 8:
+                        date_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+                    
+                    f.write(f"Username: @{username}\n")
+                    f.write(f"Likes: {likes}\n")
+                    f.write(f"Date: {date_str}\n")
+                    
+                    # Also write title and description for text analyzer
+                    f.write(f"Title: {meta.get('title', '')}\n")
+                    desc = meta.get('description', '')
+                    if desc:
+                        f.write(f"\nCaption:\n{desc}\n")
+            except Exception as e:
+                print(f"  ⚠ Failed to parse yt-dlp json: {e}")
+
+        return str(folder)
+    except subprocess.TimeoutExpired:
+        print("  ✗ yt-dlp timed out.")
+        return None
+    except Exception as e:
+        print(f"  ✗ yt-dlp exception: {e}")
+        return None
 
 # ── instaloader engine ───────────────────────────────────────────────────────
 def _download_via_instaloader(url: str) -> str | None:

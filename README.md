@@ -91,27 +91,30 @@ Everything is stored in a local SQLite database **you own** — no cloud subscri
 
 ### ✨ Content Analysis
 
-| Feature | Description |
-|---|---|
-| **Universal share target** | Works with any app that shares URLs — Instagram, YouTube, Chrome, Reddit, etc. |
-| **Multi-provider AI** | Automatic fallback across Groq, Gemini, OpenRouter, and Ollama |
-| **Smart model router** | EMA-ranked, auto-healing, self-optimising — always picks the fastest available model |
-| **Music identification** | Shazam-powered background music detection from Instagram reels |
-| **Audio transcription** | Groq Whisper API (cloud) with local OpenAI Whisper as offline fallback |
-| **Native YouTube analysis** | Gemini watches the video directly — no download needed |
-| **Web scraping** | Multi-strategy extraction (newspaper4k, trafilatura, Wayback Machine) |
+| Feature                     | Description                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| **Universal share target**  | Works with any app that shares URLs — Instagram, YouTube, Facebook, Chrome, Reddit, etc.      |
+| **Multi-provider AI**       | Automatic fallback across Groq, Gemini, OpenRouter, Ollama, and custom OpenAI-compatible APIs |
+| **Smart model router**      | EMA-ranked, auto-healing, self-optimising — always picks the fastest available model          |
+| **Music identification**    | Shazam-powered background music detection from video reels                                    |
+| **Audio transcription**     | Groq Whisper API (cloud) with local Faster Whisper as offline fallback                        |
+| **Native YouTube analysis** | Gemini watches the video directly — no download needed                                        |
+| **YouTube Shorts fallback** | Uses yt-dlp + metadata scraping when transcript unavailable                                   |
+| **Facebook Reels support**  | Full download + analysis pipeline via yt-dlp                                                  |
+| **Web scraping**            | Multi-strategy extraction (newspaper4k, trafilatura, Wayback Machine)                         |
+| **Docker support**          | Single container deployment with volume-mounted config                                        |
 
 ### 📂 Organisation & Discovery
 
-| Feature | Description |
-|---|---|
-| **Custom collections** | Watch Later, Recipes, Work, or any category you create |
-| **Full-text search** | Search across titles, summaries, tags, and transcriptions |
-| **Smart filtering** | Filter by category, tags, or collection |
-| **Watch Later reminders** | Daily notifications with unique time slots per post (8 AM – 9:30 PM) |
-| **Urgent alerts** | Morning notifications for deadline-sensitive content (exams, hackathons) |
-| **Offline-first** | Queues saves locally and syncs automatically when reconnected |
-| **Retry recovery** | Failed analyses can be retried directly from the Library |
+| Feature                   | Description                                                              |
+| ------------------------- | ------------------------------------------------------------------------ |
+| **Custom collections**    | Watch Later, Recipes, Work, or any category you create                   |
+| **Full-text search**      | Search across titles, summaries, tags, and transcriptions                |
+| **Smart filtering**       | Filter by category, tags, or collection                                  |
+| **Watch Later reminders** | Daily notifications with unique time slots per post (8 AM – 9:30 PM)     |
+| **Urgent alerts**         | Morning notifications for deadline-sensitive content (exams, hackathons) |
+| **Offline-first**         | Queues saves locally and syncs automatically when reconnected            |
+| **Retry recovery**        | Failed analyses can be retried directly from the Library                 |
 
 ---
 
@@ -119,6 +122,9 @@ Everything is stored in a local SQLite database **you own** — no cloud subscri
 
 ```
 superbrain/
+├── Dockerfile                    # Single-container Docker build
+├── docker-entrypoint.sh         # Container startup script
+├── .dockerignore                # Excludes temp files from build
 ├── backend/
 │   ├── start.py                  # Interactive setup wizard & server launcher
 │   ├── reset.py                  # Reset / clean utility (selective wipe)
@@ -127,26 +133,25 @@ superbrain/
 │   ├── core/
 │   │   ├── model_router.py       # Multi-provider AI router with EMA ranking
 │   │   ├── database.py           # SQLite (WAL mode) — posts, queue, collections
-│   │   ├── link_checker.py       # URL validator (Instagram / YouTube / web)
+│   │   ├── link_checker.py       # URL validator (Instagram / YouTube / Facebook / web)
 │   │   └── category_manager.py   # Category normalisation & deduplication
 │   ├── analyzers/
 │   │   ├── visual_analyze.py     # Vision analysis (frame extraction + AI)
-│   │   ├── audio_transcribe.py   # Groq Whisper → local Whisper fallback
+│   │   ├── audio_transcribe.py   # Faster Whisper transcription (local)
 │   │   ├── music_identifier.py   # Shazamio multi-segment recognition
 │   │   ├── text_analyzer.py      # Caption / metadata AI analysis
-│   │   ├── caption.py            # Instagram caption extractor
-│   │   ├── youtube_analyzer.py   # Gemini native YouTube understanding
+│   │   ├── youtube_analyzer.py   # Gemini native YouTube + yt-dlp fallback
 │   │   └── webpage_analyzer.py   # Multi-strategy web scraper + AI summary
 │   ├── instagram/
-│   │   ├── instagram_downloader.py  # Instaloader engine (auth/anonymous)
+│   │   ├── instagram_downloader.py  # Instaloader + yt-dlp fallback (FB support)
 │   │   └── instagram_login.py      # One-time session setup with 2FA
 │   ├── utils/
 │   │   ├── db_stats.py           # Database statistics
 │   │   └── manage_token.py       # API token management
-│   ├── config/
-│   │   ├── .api_keys.example     # Template for API keys
-│   │   ├── openrouter_free_models.json
-│   │   └── model_rankings.json   # Persisted provider performance data
+│   ├── config/                    # Volume-mounted (persists on host)
+│   │   ├── .api_keys             # API credentials
+│   │   ├── .instaloader_session  # Instagram session
+│   │   └── token.txt             # API token
 │   ├── tests/
 │   └── requirements.txt
 │
@@ -182,12 +187,13 @@ Free AI APIs have rate limits, downtime, and variable speed. SuperBrain solves t
 
 ### Priority Chain
 
-| Task | Fallback Order |
-|---|---|
-| **Text analysis** | Groq → Gemini → OpenRouter (hardcoded best) → Dynamic free OpenRouter → Ollama |
-| **Vision** | Gemini → Groq Vision → OpenRouter Vision → Ollama Vision |
-| **Transcription** | Groq Whisper API → Local OpenAI Whisper |
-| **YouTube** | Gemini (native URL understanding) |
+| Task                     | Fallback Order                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| **Text analysis**        | Groq → Gemini → OpenRouter (hardcoded best) → Dynamic free OpenRouter → Custom API → Ollama |
+| **Vision**               | Gemini → Groq Vision → OpenRouter Vision → Custom API → Ollama Vision                       |
+| **Transcription**        | Groq Whisper API → Local Faster Whisper                                                     |
+| **YouTube**              | Gemini (native URL understanding) → yt-dlp transcript → Metadata scrape                     |
+| **Facebook/Other Video** | yt-dlp download → Visual + Audio pipeline                                                   |
 
 ### How It Works
 
@@ -198,14 +204,43 @@ Free AI APIs have rate limits, downtime, and variable speed. SuperBrain solves t
 
 ### Supported Providers
 
-| Provider | Key in `config/.api_keys` | Notes |
-|---|---|---|
-| **Groq** | `GROQ_API_KEY` | Fastest inference — free tier at [console.groq.com](https://console.groq.com) |
-| **Google Gemini** | `GEMINI_API_KEY` | Most generous free tier at [aistudio.google.com](https://aistudio.google.com) |
-| **OpenRouter** | `OPENROUTER_API_KEY` | Free model router at [openrouter.ai](https://openrouter.ai) |
-| **Ollama** | *(no key needed)* | Local inference — `start.py` guides setup · recommended model: `qwen3-vl:4b` |
+| Provider                       | Key in `config/.api_keys`                           | Notes                                                                                   |
+| ------------------------------ | --------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **Groq**                       | `GROQ_API_KEY`                                      | Fastest inference — free tier at [console.groq.com](https://console.groq.com)           |
+| **Google Gemini**              | `GEMINI_API_KEY`                                    | Most generous free tier at [aistudio.google.com](https://aistudio.google.com)           |
+| **OpenRouter**                 | `OPENROUTER_API_KEY`                                | Free model router at [openrouter.ai](https://openrouter.ai)                             |
+| **Ollama**                     | _(no key needed)_                                   | Local inference — `start.py` guides setup · recommended model: `qwen3-vl:4b`            |
+| **Custom (OpenAI-compatible)** | `CUSTOM_BASE_URL`, `CUSTOM_API_KEY`, `CUSTOM_MODEL` | Use any local or hosted OpenAI-compatible API (LM Studio, Ollama with custom URL, etc.) |
 
 > **Tip:** You don't need all providers — the router falls back automatically. Start with at least **Gemini** (most generous free tier). Ollama serves as the fully offline last resort.
+
+### Docker Configuration
+
+The Docker setup uses a volume mount for config persistence:
+
+```bash
+# Build
+docker build -t superbrain .
+
+# Run with config persistence
+docker run -d --name superbrain \
+  -p 5001:5000 \
+  -v $(pwd)/backend/config:/app/backend/config \
+  superbrain
+
+# Access UI
+open http://localhost:5001/setup
+```
+
+**Config directory contents (persisted on host):**
+
+- `.api_keys` — API provider credentials
+- `.instaloader_session` — Instagram login session
+- `token.txt` — API authentication token
+
+**Environment variables (optional):**
+
+- Pass `-e PYTHONUNBUFFERED=1` for live log output
 
 ---
 
@@ -213,14 +248,53 @@ Free AI APIs have rate limits, downtime, and variable speed. SuperBrain solves t
 
 ### Prerequisites
 
-| Requirement | Install | Required? |
-|---|---|---|
-| Python 3.10+ | [python.org](https://python.org) | ✅ Yes |
-| ffmpeg | `sudo apt install ffmpeg` / `brew install ffmpeg` | ✅ Yes |
-| Node.js 20+ | [nodejs.org](https://nodejs.org) | Only for building the app |
-| ngrok | [ngrok.com](https://ngrok.com) | Only if backend runs on your PC |
+| Requirement  | Install                                           | Required?                       |
+| ------------ | ------------------------------------------------- | ------------------------------- |
+| Python 3.10+ | [python.org](https://python.org)                  | For local setup only            |
+| Docker       | [docker.com](https://docker.com)                  | For Docker setup (recommended)  |
+| ffmpeg       | `sudo apt install ffmpeg` / `brew install ffmpeg` | For local setup only            |
+| Node.js 20+  | [nodejs.org](https://nodejs.org)                  | Only for building the app       |
+| ngrok        | [ngrok.com](https://ngrok.com)                    | Only if backend runs on your PC |
 
-### Quick Start
+### Quick Start (Docker - Recommended)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/sidinsearch/superbrain.git
+cd superbrain
+
+# 2. Build the Docker image
+docker build -t superbrain .
+
+# 3. Run the container
+#    - Config persists at ./backend/config on your host
+#    - Edit ./backend/config/.api_keys before running to configure providers
+docker run -d --name superbrain -p 5001:5000 -v $(pwd)/backend/config:/app/backend/config superbrain
+
+# 4. Access the setup UI
+#    Open http://localhost:5001/setup in your browser
+```
+
+### First-Time Setup (via Web UI)
+
+1. Open `http://localhost:5001/setup` in your browser
+2. **Step 1 - AI Provider**: Select your provider and enter API keys
+   - **API Key Provider**: Groq, Gemini, or OpenRouter
+   - **Ollama**: Local AI (offline)
+   - **Custom Provider**: Any OpenAI-compatible API (e.g., LM Studio, local AI server)
+3. **Step 2 - Instagram** (optional): Enter credentials to download Instagram content
+4. **Step 3 - Whisper**: Choose audio transcription model
+5. **Step 4 - ngrok** (optional): For remote access
+6. **Step 5 - Token**: Your API token (auto-generated)
+7. Click **Save Configuration**
+
+The UI will redirect to the test page where you can try analyzing URLs.
+
+**See it in action:**
+
+https://github.com/user-attachments/assets/9769681b-5494-4093-b1bf-2c60c20e1673
+
+### Quick Start (Local Python)
 
 ```bash
 # 1. Clone the repository
@@ -237,12 +311,6 @@ ngrok http 5000
 # 4. Install the APK on your Android phone
 #    Open Settings in the app → enter the ngrok URL + token from backend/token.txt
 ```
-
-**See it in action:**
-
-
-https://github.com/user-attachments/assets/9769681b-5494-4093-b1bf-2c60c20e1673
-
 
 `start.py` is the **single entry point** for the backend. On first run it walks you through:
 
@@ -298,10 +366,10 @@ SuperBrain uses [Instaloader](https://instaloader.github.io/) to download Instag
 
 SuperBrain works **without any Instagram account** — but with limitations:
 
-| Limitation | Details |
-|---|---|
-| **Public posts only** | Only posts from public profiles that Instagram serves to unauthenticated users |
-| **Rate limiting** | Instagram aggressively rate-limits anonymous requests — you may need to wait several minutes between saves |
+| Limitation                | Details                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Public posts only**     | Only posts from public profiles that Instagram serves to unauthenticated users                                      |
+| **Rate limiting**         | Instagram aggressively rate-limits anonymous requests — you may need to wait several minutes between saves          |
 | **Login-required blocks** | Some posts trigger a `LoginRequiredException` even if the profile is public — these get auto-queued for retry later |
 
 YouTube videos and web pages are **not affected** — they work fully without Instagram credentials.
@@ -329,6 +397,7 @@ python instagram/instagram_login.py
 ```
 
 This interactive script handles the full login flow including **two-factor authentication (2FA)**. It saves:
+
 - Credentials → `config/.api_keys` (gitignored)
 - Session → `.instaloader_session` (gitignored)
 
@@ -344,7 +413,7 @@ Credentials are stored in `config/.api_keys` which is **gitignored** — they wi
 
 ## Installing the Android App
 
-### Option 1 — Download from Releases *(easiest)*
+### Option 1 — Download from Releases _(easiest)_
 
 The latest APK is always available on the **[Releases](https://github.com/sidinsearch/superbrain/releases)** page.
 
@@ -383,14 +452,14 @@ cd android
 
 The backend is lightweight and runs anywhere with Python 3.10+:
 
-| Platform | Cost | Notes |
-|---|---|---|
-| **Your PC / laptop** | Free | Use ngrok to expose · disable sleep / hibernate |
-| **Raspberry Pi** | ~$50 one-time | Low power, always-on home server |
-| **AWS EC2** | Free tier | `t2.micro` handles it fine |
-| **DigitalOcean** | $4/mo | Basic droplet |
-| **Hetzner** | €3.29/mo | Fast EU-based VPS |
-| **Google Cloud Run** | Pay-per-use | Serverless, scales to zero |
+| Platform             | Cost          | Notes                                           |
+| -------------------- | ------------- | ----------------------------------------------- |
+| **Your PC / laptop** | Free          | Use ngrok to expose · disable sleep / hibernate |
+| **Raspberry Pi**     | ~$50 one-time | Low power, always-on home server                |
+| **AWS EC2**          | Free tier     | `t2.micro` handles it fine                      |
+| **DigitalOcean**     | $4/mo         | Basic droplet                                   |
+| **Hetzner**          | €3.29/mo      | Fast EU-based VPS                               |
+| **Google Cloud Run** | Pay-per-use   | Serverless, scales to zero                      |
 
 For cloud hosting, open port `5000` in your firewall and point the app directly at your server's public IP — no ngrok needed.
 
@@ -404,11 +473,11 @@ SuperBrain uses Android notification channels to keep you engaged with your save
 
 Adding a post to the **Watch Later** collection triggers:
 
-| Notification | When | Details |
-|---|---|---|
-| **Instant confirmation** | Immediately | High-priority heads-up banner |
-| **Daily reminder** | Once per day, unique time slot per post | Spread between 8:00 AM – 9:30 PM |
-| **Urgent morning alert** | 9:00 AM | Only for deadline-sensitive content (exams, hackathons, applications) |
+| Notification             | When                                    | Details                                                               |
+| ------------------------ | --------------------------------------- | --------------------------------------------------------------------- |
+| **Instant confirmation** | Immediately                             | High-priority heads-up banner                                         |
+| **Daily reminder**       | Once per day, unique time slot per post | Spread between 8:00 AM – 9:30 PM                                      |
+| **Urgent morning alert** | 9:00 AM                                 | Only for deadline-sensitive content (exams, hackathons, applications) |
 
 Each reminder includes a **Mark as Watched** action button — tap it to remove from Watch Later and cancel all future reminders for that post.
 
@@ -422,26 +491,26 @@ Saving to any non-Watch Later collection fires an instant **"Saved to SuperBrain
 
 All endpoints require the `X-API-Key` header with the token from `backend/token.txt`.
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/analyze` | Submit a URL for analysis (queued if busy) |
-| `GET` | `/cache/{shortcode}` | Retrieve cached analysis by shortcode |
-| `GET` | `/recent` | List recent analyses |
-| `GET` | `/search` | Full-text search across posts |
-| `GET` | `/category/{category}` | Filter posts by category |
-| `GET` | `/stats` | Database statistics |
-| `GET` | `/caption` | Extract Instagram caption from URL |
-| `GET` | `/collections` | List all collections |
-| `POST` | `/collections` | Create a new collection |
-| `PUT` | `/collections/{id}/posts` | Update posts in a collection |
-| `DELETE` | `/collections/{id}` | Delete a collection |
-| `PUT` | `/post/{shortcode}` | Update post fields (category, title, summary) |
-| `DELETE` | `/post/{shortcode}` | Delete a post (cancels active analysis if running) |
-| `GET` | `/queue-status` | Current processing and queue state |
-| `GET` | `/queue/retry` | Items scheduled for automatic retry |
-| `POST` | `/queue/retry/flush` | Force-promote retry items to active queue |
-| `GET` | `/ping` | Connectivity check |
-| `GET` | `/health` | Health check with system info |
+| Method   | Endpoint                  | Description                                        |
+| -------- | ------------------------- | -------------------------------------------------- |
+| `POST`   | `/analyze`                | Submit a URL for analysis (queued if busy)         |
+| `GET`    | `/cache/{shortcode}`      | Retrieve cached analysis by shortcode              |
+| `GET`    | `/recent`                 | List recent analyses                               |
+| `GET`    | `/search`                 | Full-text search across posts                      |
+| `GET`    | `/category/{category}`    | Filter posts by category                           |
+| `GET`    | `/stats`                  | Database statistics                                |
+| `GET`    | `/caption`                | Extract Instagram caption from URL                 |
+| `GET`    | `/collections`            | List all collections                               |
+| `POST`   | `/collections`            | Create a new collection                            |
+| `PUT`    | `/collections/{id}/posts` | Update posts in a collection                       |
+| `DELETE` | `/collections/{id}`       | Delete a collection                                |
+| `PUT`    | `/post/{shortcode}`       | Update post fields (category, title, summary)      |
+| `DELETE` | `/post/{shortcode}`       | Delete a post (cancels active analysis if running) |
+| `GET`    | `/queue-status`           | Current processing and queue state                 |
+| `GET`    | `/queue/retry`            | Items scheduled for automatic retry                |
+| `POST`   | `/queue/retry/flush`      | Force-promote retry items to active queue          |
+| `GET`    | `/ping`                   | Connectivity check                                 |
+| `GET`    | `/health`                 | Health check with system info                      |
 
 > Interactive API docs are available at `http://localhost:5000/docs` (Swagger UI) and `/redoc`.
 
@@ -449,19 +518,20 @@ All endpoints require the `X-API-Key` header with the token from `backend/token.
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| **Mobile** | React Native 0.81 · Expo SDK 54 · TypeScript |
-| **Backend** | Python 3 · FastAPI · Uvicorn |
-| **Database** | SQLite with WAL mode |
-| **AI Routing** | Custom multi-provider router (Groq · Gemini · OpenRouter · Ollama) |
-| **Vision** | OpenCV frame extraction → AI vision models |
-| **Transcription** | Groq Whisper API → OpenAI Whisper (local fallback) |
-| **Music ID** | Shazamio (multi-segment recognition) |
-| **Instagram** | Instaloader + Instagrapi |
-| **Web Scraping** | newspaper4k · trafilatura · Wayback Machine · BeautifulSoup |
-| **Notifications** | Expo Notifications · Android notification channels |
-| **CI/CD** | GitHub Actions (Gradle APK build) · EAS Build |
+| Layer              | Technology                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| **Mobile**         | React Native 0.81 · Expo SDK 54 · TypeScript                                                  |
+| **Backend**        | Python 3 · FastAPI · Uvicorn                                                                  |
+| **Database**       | SQLite with WAL mode                                                                          |
+| **AI Routing**     | Custom multi-provider router (Groq · Gemini · OpenRouter · Ollama · Custom OpenAI-compatible) |
+| **Vision**         | OpenCV frame extraction → AI vision models                                                    |
+| **Transcription**  | Faster Whisper (local)                                                                        |
+| **Music ID**       | Shazamio (multi-segment recognition)                                                          |
+| **Video Download** | Instaloader (Instagram) + yt-dlp (YouTube/Facebook/Generic)                                   |
+| **Web Scraping**   | newspaper4k · trafilatura · BeautifulSoup · yt-dlp                                            |
+| **Docker**         | Single-stage slim image (~560MB)                                                              |
+| **Notifications**  | Expo Notifications · Android notification channels                                            |
+| **CI/CD**          | GitHub Actions (Gradle APK build) · EAS Build                                                 |
 
 ---
 
@@ -483,13 +553,12 @@ For major changes, please [open an issue](https://github.com/sidinsearch/superbr
 
 This project is licensed under the **[GNU Affero General Public License v3.0](LICENSE)** (AGPL-3.0).
 
-| Use Case | Allowed? |
-|---|---|
-| Personal & non-commercial use | ✅ Free, no restrictions |
-| Forking & modifications | ✅ Must release under AGPL-3.0 with source code |
-| Running as a network service (SaaS) | ✅ Must publish your modified source code |
-| Commercial / proprietary use | ❌ Requires a separate commercial license |
-
+| Use Case                            | Allowed?                                        |
+| ----------------------------------- | ----------------------------------------------- |
+| Personal & non-commercial use       | ✅ Free, no restrictions                        |
+| Forking & modifications             | ✅ Must release under AGPL-3.0 with source code |
+| Running as a network service (SaaS) | ✅ Must publish your modified source code       |
+| Commercial / proprietary use        | ❌ Requires a separate commercial license       |
 
 ---
 

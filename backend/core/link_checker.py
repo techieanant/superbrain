@@ -86,34 +86,38 @@ _URL_IN_TEXT_RE = re.compile(
 #  Instagram
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _validate_instagram(url: str, parsed) -> dict:
-    """Returns validate_link result for an Instagram URL, or None if not Instagram."""
-    if parsed.netloc not in (
-        "instagram.com", "www.instagram.com", "instagr.am", "www.instagr.am"
-    ):
-        return None
-
-    match = re.search(r"/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", parsed.path)
-    if not match:
+def _validate_instagram(url: str, parsed) -> dict | None:
+    """Returns validate_link result for an Instagram or Facebook Video/Reel URL, or None if neither."""
+    netloc = parsed.netloc.lower()
+    
+    # Check Instagram
+    if netloc in ("instagram.com", "www.instagram.com", "instagr.am", "www.instagr.am"):
+        match = re.search(r"/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", parsed.path)
+        if match:
+            shortcode = match.group(1)
+            return {
+                "valid": True, "content_type": "instagram",
+                "shortcode": shortcode, "video_id": None,
+                "error": None, "url": url,
+            }
         return {
             "valid": False, "content_type": "instagram",
             "shortcode": None, "video_id": None,
             "error": "Not a valid Instagram post/reel/video URL", "url": url,
         }
-
-    shortcode = match.group(1)
-    if not re.match(r"^[A-Za-z0-9_-]+$", shortcode):
+        
+    # Check Facebook Reels / Videos
+    if netloc in ("facebook.com", "www.facebook.com", "fb.watch", "www.fb.watch"):
+        # We can treat FB like Instagram in the pipeline since it requires video download
+        # Create a deterministic shortcode for the FB link using sha256
+        page_id = hashlib.sha256(url.encode()).hexdigest()[:16]
         return {
-            "valid": False, "content_type": "instagram",
-            "shortcode": None, "video_id": None,
-            "error": "Invalid Instagram shortcode format", "url": url,
+            "valid": True, "content_type": "instagram", # trick main.py to use download pipeline
+            "shortcode": f"FB_{page_id}", "video_id": None,
+            "error": None, "url": url,
         }
-
-    return {
-        "valid": True, "content_type": "instagram",
-        "shortcode": shortcode, "video_id": None,
-        "error": None, "url": url,
-    }
+        
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -20,8 +20,9 @@ del _sys_
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BACKEND_DIR     = pathlib.Path(__file__).parent.parent
-API_KEYS_FILE   = BACKEND_DIR / ".api_keys"
-IL_SESSION_FILE = BACKEND_DIR / ".instaloader_session"
+CONFIG_DIR      = BACKEND_DIR / "config"
+API_KEYS_FILE   = CONFIG_DIR / ".api_keys"
+IL_SESSION_FILE = CONFIG_DIR / ".instaloader_session"
 
 
 def _banner(msg: str) -> None:

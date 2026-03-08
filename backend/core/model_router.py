@@ -518,7 +518,7 @@ class ModelRouter:
     # ── Configuration ─────────────────────────────────────────────────────────
 
     def _load_api_keys(self):
-        """Load API keys from environment and .api_keys file."""
+        """Load API keys from environment and .api_keys file (supports both old and new format)."""
         for k in ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"):
             v = os.environ.get(k)
             if v:
@@ -530,7 +530,37 @@ class ModelRouter:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         k, v = line.split("=", 1)
-                        self._api_keys[k.strip()] = v.strip()
+                        key_name = k.strip().upper()
+                        
+                        if key_name in ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"):
+                            self._api_keys[key_name] = v.strip()
+                        
+                        elif key_name == "API_KEY":
+                            provider = self._api_keys.get("API_PROVIDER", "gemini").upper()
+                            if provider == "GEMINI":
+                                self._api_keys["GEMINI_API_KEY"] = v.strip()
+                            elif provider == "GROQ":
+                                self._api_keys["GROQ_API_KEY"] = v.strip()
+                            elif provider == "OPENROUTER":
+                                self._api_keys["OPENROUTER_API_KEY"] = v.strip()
+                        
+                        elif key_name == "API_PROVIDER":
+                            self._api_keys["API_PROVIDER"] = v.strip()
+                        
+                        elif key_name == "CUSTOM_API_KEY":
+                            self._api_keys["CUSTOM_API_KEY"] = v.strip()
+                        elif key_name == "CUSTOM_BASE_URL":
+                            self._api_keys["CUSTOM_BASE_URL"] = v.strip()
+                        elif key_name == "CUSTOM_MODEL":
+                            self._api_keys["CUSTOM_MODEL"] = v.strip()
+                        
+                        elif key_name == "OLLAMA_URL":
+                            self._api_keys["OLLAMA_URL"] = v.strip()
+                        elif key_name == "OLLAMA_MODEL":
+                            self._api_keys["OLLAMA_MODEL"] = v.strip()
+                        
+                        elif key_name == "AI_PROVIDER_TYPE":
+                            self._api_keys["AI_PROVIDER_TYPE"] = v.strip()
 
     def _key(self, name: str) -> Optional[str]:
         return self._api_keys.get(name) or None
@@ -860,7 +890,7 @@ class ModelRouter:
         r = client.chat.completions.create(
             model=model_id,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=800,
+            max_tokens=1500,
             temperature=0.7,
         )
         return r.choices[0].message.content.strip()
@@ -879,7 +909,7 @@ class ModelRouter:
         r = client.chat.completions.create(
             model=model_id,
             messages=[{"role": "user", "content": content}],
-            max_tokens=800,
+            max_tokens=1500,
             temperature=0.7,
         )
         return r.choices[0].message.content.strip()
@@ -890,7 +920,7 @@ class ModelRouter:
         model = genai.GenerativeModel(model_id)
         r = model.generate_content(
             prompt,
-            generation_config={"max_output_tokens": 800, "temperature": 0.7},
+            generation_config={"max_output_tokens": 1500, "temperature": 0.7},
         )
         return r.text.strip()
 
@@ -904,7 +934,7 @@ class ModelRouter:
         parts.append(prompt)
         r = model.generate_content(
             parts,
-            generation_config={"max_output_tokens": 800, "temperature": 0.7},
+            generation_config={"max_output_tokens": 1500, "temperature": 0.7},
         )
         return r.text.strip()
 
@@ -921,7 +951,7 @@ class ModelRouter:
             json={
                 "model": model_id,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 800,
+                "max_tokens": 1500,
                 "temperature": 0.7,
                 "route": "fallback",  # Nexlify uptime-optimizer: auto-fallback on provider failures
             },
@@ -952,7 +982,7 @@ class ModelRouter:
             json={
                 "model": model_id,
                 "messages": [{"role": "user", "content": content}],
-                "max_tokens": 800,
+                "max_tokens": 1500,
                 "temperature": 0.7,
                 "route": "fallback",  # Nexlify uptime-optimizer: auto-fallback on provider failures
             },
@@ -963,33 +993,143 @@ class ModelRouter:
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
 
-    def _ollama_text(self, model_id: str, prompt: str) -> str:
-        import ollama
-        r = ollama.generate(
-            model=model_id,
-            prompt=prompt,
-            options={"temperature": 0.7, "num_predict": 800},
+    def _custom_text(self, base_url: str, api_key: str, model: str, prompt: str) -> str:
+        """Generate text using a custom OpenAI-compatible API."""
+        import httpx
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        
+        response = httpx.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers=headers,
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1500,
+                "temperature": 0.7
+            },
+            timeout=120.0
         )
-        return r.get("response", "").strip()
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"].strip()
 
-    def _ollama_vision(self, model_id: str, prompt: str, images_b64: List[str]) -> str:
-        import ollama
-        r = ollama.generate(
-            model=model_id,
-            prompt=prompt,
-            images=images_b64,
-            options={"temperature": 0.7, "num_predict": 800},
+    def _custom_vision(self, base_url: str, api_key: str, model: str, prompt: str, images_b64: List[str]) -> str:
+        """Analyze images using a custom OpenAI-compatible API."""
+        import httpx
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        
+        content: List[Dict] = []
+        for b64 in images_b64:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+            })
+        content.append({"type": "text", "text": prompt})
+        
+        response = httpx.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers=headers,
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": content}],
+                "max_tokens": 1500,
+                "temperature": 0.7
+            },
+            timeout=120.0
         )
-        return r.get("response", "").strip()
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"].strip()
+
+    def _ollama_text(self, model_id: str, prompt: str, base_url: str = "http://localhost:11434") -> str:
+        """Generate text using Ollama."""
+        import httpx
+        response = httpx.post(
+            f"{base_url}/api/generate",
+            json={
+                "model": model_id,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.7, "num_predict": 1500}
+            },
+            timeout=120.0
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("response", "").strip()
+
+    def _ollama_vision(self, model_id: str, prompt: str, images_b64: List[str], base_url: str = "http://localhost:11434") -> str:
+        """Analyze images using Ollama with vision model."""
+        import httpx
+        response = httpx.post(
+            f"{base_url}/api/generate",
+            json={
+                "model": model_id,
+                "prompt": prompt,
+                "images": images_b64,
+                "stream": False,
+                "options": {"temperature": 0.7, "num_predict": 1500}
+            },
+            timeout=120.0
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("response", "").strip()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
+    def _get_provider_type(self) -> str:
+        """Get the configured AI provider type."""
+        return self._api_keys.get("AI_PROVIDER_TYPE", "api_key").lower()
+
     def generate_text(self, prompt: str) -> str:
         """
-        Generate text using the best available model.
-        Falls back through the ranked list until one succeeds.
-        Raises RuntimeError if all fail.
+        Generate text using the configured provider.
+        If AI_PROVIDER_TYPE is 'custom' or 'ollama', use that directly.
+        Otherwise, fall back to the model ranking system.
         """
+        provider_type = self._get_provider_type()
+        
+        # Use custom provider directly if configured
+        if provider_type == "custom":
+            base_url = self._key("CUSTOM_BASE_URL")
+            api_key = self._key("CUSTOM_API_KEY")
+            model = self._key("CUSTOM_MODEL")
+            if base_url and model:
+                print(f"  🤖 [CUSTOM] {model} ...", flush=True)
+                t0 = time.time()
+                try:
+                    result = self._custom_text(base_url, api_key, model, prompt)
+                    elapsed = time.time() - t0
+                    print(f"  ✓ {elapsed:.1f}s", flush=True)
+                    return result
+                except Exception as e:
+                    print(f"  ✗ Custom provider failed: {e}", flush=True)
+                    raise RuntimeError(f"Custom provider failed: {e}")
+            raise RuntimeError("Custom provider not configured. Set CUSTOM_BASE_URL and CUSTOM_MODEL in settings.")
+        
+        # Use Ollama directly if configured
+        if provider_type == "ollama":
+            ollama_url = self._key("OLLAMA_URL") or "http://localhost:11434"
+            model = self._key("OLLAMA_MODEL")
+            if model:
+                print(f"  🤖 [OLLAMA] {model} ...", flush=True)
+                t0 = time.time()
+                try:
+                    result = self._ollama_text(model, prompt, ollama_url)
+                    elapsed = time.time() - t0
+                    print(f"  ✓ {elapsed:.1f}s", flush=True)
+                    return result
+                except Exception as e:
+                    print(f"  ✗ Ollama failed: {e}", flush=True)
+                    raise RuntimeError(f"Ollama failed: {e}")
+            raise RuntimeError("Ollama model not configured. Set OLLAMA_MODEL in settings.")
+        
+        # Default: use model ranking system
         ranked = self._ranked_models("text")
         if not ranked:
             raise RuntimeError(
@@ -1029,11 +1169,47 @@ class ModelRouter:
 
     def analyze_images(self, prompt: str, images_b64: List[str]) -> str:
         """
-        Analyze one or more images using the best available vision model.
+        Analyze one or more images using the configured provider.
         images_b64: list of base64-encoded JPEG strings.
-        Falls back through the ranked list until one succeeds.
-        Raises RuntimeError if all fail.
         """
+        provider_type = self._get_provider_type()
+        
+        # Use custom provider directly if configured
+        if provider_type == "custom":
+            base_url = self._key("CUSTOM_BASE_URL")
+            api_key = self._key("CUSTOM_API_KEY")
+            model = self._key("CUSTOM_MODEL")
+            if base_url and model:
+                print(f"  🔭 [CUSTOM] {model} ...", flush=True)
+                t0 = time.time()
+                try:
+                    result = self._custom_vision(base_url, api_key, model, prompt, images_b64)
+                    elapsed = time.time() - t0
+                    print(f"  ✓ {elapsed:.1f}s", flush=True)
+                    return result
+                except Exception as e:
+                    print(f"  ✗ Custom provider vision failed: {e}", flush=True)
+                    raise RuntimeError(f"Custom provider vision failed: {e}")
+            raise RuntimeError("Custom provider not configured. Set CUSTOM_BASE_URL and CUSTOM_MODEL in settings.")
+        
+        # Use Ollama directly if configured
+        if provider_type == "ollama":
+            ollama_url = self._key("OLLAMA_URL") or "http://localhost:11434"
+            model = self._key("OLLAMA_MODEL")
+            if model:
+                print(f"  🔭 [OLLAMA] {model} ...", flush=True)
+                t0 = time.time()
+                try:
+                    result = self._ollama_vision(model, prompt, images_b64, ollama_url)
+                    elapsed = time.time() - t0
+                    print(f"  ✓ {elapsed:.1f}s", flush=True)
+                    return result
+                except Exception as e:
+                    print(f"  ✗ Ollama vision failed: {e}", flush=True)
+                    raise RuntimeError(f"Ollama vision failed: {e}")
+            raise RuntimeError("Ollama model not configured. Set OLLAMA_MODEL in settings.")
+        
+        # Default: use model ranking system
         ranked = self._ranked_models("vision")
         if not ranked:
             raise RuntimeError(

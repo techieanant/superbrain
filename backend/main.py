@@ -243,7 +243,7 @@ def parse_summary(summary_text):
 
     # Fallback: Auto-detect category if empty or unrecognised
     valid_categories = {'product', 'places', 'recipe', 'software', 'book',
-                        'tv shows', 'workout', 'film', 'event', 'other'}
+                        'tv shows', 'workout', 'film', 'event', 'news', 'other'}
     if not category or category not in valid_categories:
         category = auto_detect_category(summary_text, title, summary, tags)
 
@@ -263,12 +263,13 @@ def auto_detect_category(summary_text, title, summary, tags):
         'product': ['camera', 'device', 'gadget', 'tech', 'phone', 'laptop', 'review', 'unbox', 'product', 'dji', 'osmo', 'action cam'],
         'places': ['travel', 'trip', 'visit', 'destination', 'village', 'city', 'mountain', 'beach', 'hotel', 'itinerary', 'sikkim', 'location'],
         'recipe': ['recipe', 'cooking', 'food', 'dish', 'ingredients', 'cook', 'bake', 'meal', 'cuisine'],
-        'software': ['app', 'software', 'code', 'programming', 'developer', 'api', 'python', 'javascript'],
+        'software': ['app', 'software', 'code', 'programming', 'developer', 'python', 'javascript', 'github'],
         'book': ['book', 'novel', 'author', 'read', 'literature', 'story', 'chapter'],
         'workout': ['workout', 'fitness', 'exercise', 'gym', 'training', 'muscle', 'cardio', 'yoga'],
         'film': ['movie', 'film', 'cinema', 'actor', 'actress', 'director', 'trailer', 'premiere'],
         'tv shows': ['series', 'episode', 'season', 'show', 'tv show', 'streaming', 'netflix'],
-        'event': ['event', 'concert', 'festival', 'conference', 'meetup', 'workshop', 'seminar']
+        'event': ['event', 'concert', 'festival', 'conference', 'meetup', 'workshop', 'seminar'],
+        'news': ['minister', 'government', 'parliament', 'election', 'military', 'war', 'conflict', 'diplomatic', 'policy', 'president', 'prime minister', 'senator', 'congress', 'breaking news', 'politics']
     }
     
     # Count keyword matches

@@ -101,26 +101,26 @@ def _transcribe_groq(audio_path, api_key):
 
 def _transcribe_local(audio_path):
     """
-    Transcribe using local OpenAI Whisper.
+    Transcribe using local Faster Whisper.
     Model is read from config/whisper_model.txt (set by start.py), default 'base'.
     Returns (text, language_code).
     """
-    import whisper  # type: ignore
+    from faster_whisper import WhisperModel
 
     model_name = _load_local_model()
     print(f"  💻 Loading local Whisper model ({model_name}) …")
-    model = whisper.load_model(model_name)
+    model = WhisperModel(model_name, device="cpu", compute_type="int8")
     print("  ✓  Local model loaded")
 
-    result = model.transcribe(
+    segments, info = model.transcribe(
         str(audio_path),
-        fp16=False,
-        task="transcribe",
-        verbose=False,
+        beam_size=5,
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500)
     )
-    text = result["text"].strip()
-    lang = result.get("language", "unknown")
-    return text, lang
+    text = "".join([seg.text.strip() + " " for seg in segments])
+    lang = info.language or "unknown"
+    return text.strip(), lang
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────

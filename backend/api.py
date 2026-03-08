@@ -35,8 +35,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Token management
-TOKEN_FILE = Path(__file__).parent / "token.txt"
+# Token management — token.txt stored in config/ so it persists across container restarts
+_BASE_DIR_EARLY = Path(__file__).parent
+TOKEN_FILE = _BASE_DIR_EARLY / "config" / "token.txt"
+# Ensure the config dir exists so we can write the token file on first run
+(_BASE_DIR_EARLY / "config").mkdir(parents=True, exist_ok=True)
 
 def generate_token(length=32):
     """Generate a random API token"""
@@ -110,6 +113,254 @@ async def favicon():
         return FileResponse(str(ico), media_type="image/x-icon")
     from fastapi.responses import Response
     return Response(status_code=204)
+
+
+BASE_DIR = Path(__file__).parent
+CONFIG_DIR = BASE_DIR / "config"
+API_KEYS_FILE = CONFIG_DIR / ".api_keys"
+SETUP_DONE_FILE = BASE_DIR / ".setup_done"
+
+
+def load_api_keys() -> dict:
+    keys = {
+        "ai_provider_type": "api_key",
+        "api_provider": "gemini",
+        "api_key": "",
+        "ollama_url": "http://localhost:11434",
+        "ollama_model": None,
+        "custom_base_url": "",
+        "custom_api_key": "",
+        "custom_model": "",
+        "ig_username": "",
+        "ig_password": "",
+        "whisper_model": "base",
+        "ngrok_token": ""
+    }
+    if API_KEYS_FILE.exists():
+        for line in API_KEYS_FILE.read_text().splitlines():
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, _, v = line.partition("=")
+                key_name = k.strip().lower()
+                if key_name == "ai_provider_type":
+                    keys["ai_provider_type"] = v.strip()
+                elif key_name == "api_provider":
+                    keys["api_provider"] = v.strip()
+                elif key_name == "api_key":
+                    keys["api_key"] = v.strip()
+                elif key_name == "ollama_url":
+                    keys["ollama_url"] = v.strip()
+                elif key_name == "ollama_model":
+                    keys["ollama_model"] = v.strip() if v.strip() else None
+                elif key_name == "custom_base_url":
+                    keys["custom_base_url"] = v.strip()
+                elif key_name == "custom_api_key":
+                    keys["custom_api_key"] = v.strip()
+                elif key_name == "custom_model":
+                    keys["custom_model"] = v.strip()
+                elif key_name == "instagram_username":
+                    keys["ig_username"] = v.strip()
+                elif key_name == "instagram_password":
+                    keys["ig_password"] = v.strip()
+                elif key_name == "whisper_model":
+                    keys["whisper_model"] = v.strip() if v.strip() else "base"
+                elif key_name == "ngrok_token":
+                    keys["ngrok_token"] = v.strip()
+    whisper_cfg = CONFIG_DIR / "whisper_model.txt"
+    if whisper_cfg.exists():
+        model = whisper_cfg.read_text().strip()
+        if model:
+            keys["whisper_model"] = model
+    return keys
+
+
+def save_api_keys(keys: dict):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# SuperBrain Configuration\n",
+        f"AI_PROVIDER_TYPE={keys.get('ai_provider_type', 'api_key')}\n",
+        f"API_PROVIDER={keys.get('api_provider', 'gemini')}\n",
+        f"API_KEY={keys.get('api_key', '')}\n",
+        f"OLLAMA_URL={keys.get('ollama_url', 'http://localhost:11434')}\n",
+        f"OLLAMA_MODEL={keys.get('ollama_model', '')}\n",
+        f"CUSTOM_BASE_URL={keys.get('custom_base_url', '')}\n",
+        f"CUSTOM_API_KEY={keys.get('custom_api_key', '')}\n",
+        f"CUSTOM_MODEL={keys.get('custom_model', '')}\n",
+        f"INSTAGRAM_USERNAME={keys.get('ig_username', '')}\n",
+        f"INSTAGRAM_PASSWORD={keys.get('ig_password', '')}\n",
+        f"WHISPER_MODEL={keys.get('whisper_model', 'base')}\n",
+        f"NGROK_TOKEN={keys.get('ngrok_token', '')}\n",
+    ]
+    API_KEYS_FILE.write_text("".join(lines))
+    if keys.get("whisper_model"):
+        whisper_cfg = CONFIG_DIR / "whisper_model.txt"
+        whisper_cfg.write_text(keys["whisper_model"])
+
+
+@app.get("/setup", include_in_schema=False)
+async def serve_setup():
+    from fastapi.responses import FileResponse
+    frontend_path = BASE_DIR.parent / "frontend" / "index.html"
+    if frontend_path.exists():
+        return FileResponse(str(frontend_path), media_type="text/html")
+    return {"error": "Setup UI not found"}
+
+
+@app.get("/setup-status", include_in_schema=False)
+async def setup_status():
+    setup_complete = SETUP_DONE_FILE.exists() and SETUP_DONE_FILE.read_text().strip() == "ok"
+    return {"setup_complete": setup_complete}
+
+
+@app.post("/setup-complete", include_in_schema=False)
+async def mark_setup_complete():
+    SETUP_DONE_FILE.write_text("ok")
+    return {"success": True}
+
+
+@app.get("/config", include_in_schema=False)
+async def get_config():
+    keys = load_api_keys()
+    token = ""
+    if TOKEN_FILE.exists():
+        token = TOKEN_FILE.read_text().strip()
+    return {
+        "ai_provider_type": keys["ai_provider_type"],
+        "api_provider": keys["api_provider"],
+        "api_key": keys["api_key"],
+        "ollama_url": keys["ollama_url"],
+        "ollama_model": keys["ollama_model"],
+        "custom_base_url": keys["custom_base_url"],
+        "custom_api_key": keys["custom_api_key"],
+        "custom_model": keys["custom_model"],
+        "ig_username": keys["ig_username"],
+        "ig_password": keys["ig_password"],
+        "whisper_model": keys["whisper_model"],
+        "ngrok_token": keys["ngrok_token"],
+        "token": token
+    }
+
+
+@app.post("/config", include_in_schema=False)
+async def save_config(config: dict):
+    save_api_keys(config)
+    return {"success": True}
+
+
+@app.post("/regenerate-token", include_in_schema=False)
+async def regenerate_token():
+    import secrets
+    alphabet = string.ascii_letters + string.digits
+    new_token = ''.join(secrets.choice(alphabet) for _ in range(32))
+    TOKEN_FILE.write_text(new_token)
+    return {"token": new_token}
+
+
+# ── Instagram login state (holds instaloader instance between /login and /2fa) ──
+_ig_login_state: dict = {}
+_ig_login_lock = threading.Lock()
+
+
+@app.post("/instagram/login", include_in_schema=False)
+async def instagram_login(body: dict):
+    """
+    Attempt Instagram login. Returns:
+      {"success": true}          — logged in, session saved
+      {"needs_2fa": true}        — 2FA required, call /instagram/login/2fa next
+      {"error": "..."}           — bad credentials or other error
+    """
+    import instaloader
+
+    username = body.get("username", "").strip().lstrip("@")
+    password = body.get("password", "")
+    if not username or not password:
+        return {"error": "Username and password are required"}
+
+    IL_SESSION_FILE = CONFIG_DIR / ".instaloader_session"
+
+    L = instaloader.Instaloader(
+        download_video_thumbnails=False,
+        download_geotags=False,
+        download_comments=False,
+        save_metadata=False,
+        compress_json=False,
+    )
+
+    # Try reusing existing session
+    if IL_SESSION_FILE.exists():
+        try:
+            L.load_session_from_file(username, str(IL_SESSION_FILE))
+            if L.context.is_logged_in:
+                # Also save username to config
+                keys = load_api_keys()
+                keys["ig_username"] = username
+                keys["ig_password"] = password
+                save_api_keys(keys)
+                return {"success": True, "message": f"Already logged in as @{username}"}
+        except Exception:
+            IL_SESSION_FILE.unlink(missing_ok=True)
+
+    try:
+        L.login(username, password)
+        L.save_session_to_file(str(IL_SESSION_FILE))
+        keys = load_api_keys()
+        keys["ig_username"] = username
+        keys["ig_password"] = password
+        save_api_keys(keys)
+        return {"success": True, "message": f"Logged in as @{username}"}
+    except instaloader.exceptions.TwoFactorAuthRequiredException:
+        with _ig_login_lock:
+            _ig_login_state["L"] = L
+            _ig_login_state["username"] = username
+            _ig_login_state["password"] = password
+        return {"needs_2fa": True, "message": "2FA code required"}
+    except instaloader.exceptions.BadCredentialsException:
+        return {"error": "Incorrect username or password"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/instagram/login/2fa", include_in_schema=False)
+async def instagram_login_2fa(body: dict):
+    """Submit 2FA code after /instagram/login returned needs_2fa: true."""
+    import instaloader
+
+    code = body.get("code", "").strip().replace(" ", "")
+    if not code:
+        return {"error": "2FA code is required"}
+
+    with _ig_login_lock:
+        L = _ig_login_state.get("L")
+        username = _ig_login_state.get("username", "")
+        password = _ig_login_state.get("password", "")
+
+    if not L:
+        return {"error": "No pending login. Start with /instagram/login first."}
+
+    IL_SESSION_FILE = CONFIG_DIR / ".instaloader_session"
+    try:
+        L.two_factor_login(code)
+        L.save_session_to_file(str(IL_SESSION_FILE))
+        keys = load_api_keys()
+        keys["ig_username"] = username
+        keys["ig_password"] = password
+        save_api_keys(keys)
+        with _ig_login_lock:
+            _ig_login_state.clear()
+        return {"success": True, "message": f"Logged in as @{username}"}
+    except Exception as e:
+        return {"error": f"2FA failed: {e}"}
+
+
+@app.get("/instagram/status", include_in_schema=False)
+async def instagram_status():
+    """Check if an Instagram session file exists."""
+    IL_SESSION_FILE = CONFIG_DIR / ".instaloader_session"
+    keys = load_api_keys()
+    username = keys.get("ig_username", "")
+    if IL_SESSION_FILE.exists() and username:
+        return {"connected": True, "username": username}
+    return {"connected": False, "username": ""}
 
 # Shared Instaloader instance for caption fetching (reuse session to avoid rate limits)
 caption_loader = None
@@ -259,6 +510,12 @@ class AnalysisResponse(BaseModel):
 @app.get("/")
 async def root():
     """API information and health check (no authentication required)"""
+    setup_complete = SETUP_DONE_FILE.exists() and SETUP_DONE_FILE.read_text().strip() == "ok"
+    if not setup_complete:
+        from fastapi.responses import FileResponse
+        frontend_path = BASE_DIR.parent / "frontend" / "index.html"
+        if frontend_path.exists():
+            return FileResponse(str(frontend_path), media_type="text/html")
     return {
         "name": "SuperBrain Instagram Analyzer API",
         "version": "1.02",
@@ -759,6 +1016,22 @@ async def search_by_tags(
 async def ping():
     """Ultra-lightweight liveness check — no DB, no auth, instant response."""
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/test")
+async def test_endpoint():
+    """Simple test endpoint - returns plain text with explicit 200 status"""
+    return "OK"
+
+
+@app.get("/debug")
+async def debug_endpoint():
+    """Debug endpoint - returns request info"""
+    from starlette.requests import Request
+    return {
+        "host": "10.0.0.211:5001",
+        "ok": True
+    }
 
 
 # ──────────────────────────────────────────────────────────────────
