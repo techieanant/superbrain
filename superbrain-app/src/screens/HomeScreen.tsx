@@ -23,7 +23,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import apiService from '../services/api';
 import postsCache from '../services/postsCache';
 import collectionsService from '../services/collections';
-import { scheduleAllWatchLaterNotifications, sendImmediateWatchLaterNotification, sendImmediateSavedNotification } from '../services/notificationService';
+import { scheduleAllWatchLaterNotifications, sendImmediateWatchLaterNotification, sendImmediateSavedNotification, sendAnalysisCompleteNotification } from '../services/notificationService';
 import { Post, Collection } from '../types';
 import { colors } from '../theme/colors';
 import { RootStackParamList } from '../../App';
@@ -63,8 +63,6 @@ const HomeScreen = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isConfigured, setIsConfigured] = useState(true);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const loadPostsRef = useRef<(forceRefresh?: boolean) => Promise<void>>(undefined);
-  const prevProcessingRef = useRef<number>(0); // tracks backend processing_count across poll ticks
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
 
@@ -169,18 +167,6 @@ const HomeScreen = () => {
 
   const loadPosts = async (forceRefresh: boolean = false) => {
     try {
-      // Reconcile: if a post was in the failed list AND still stuck in analyzing, clean it up.
-      // This prevents \"✨ Analyzing...\" overlay appearing permanently for posts that failed
-      // analysis while the app was in the background.
-      const failedList = await postsCache.getFailedPosts();
-      if (failedList.length > 0) {
-        for (const fp of failedList) {
-          if (postsCache.isAnalyzing(fp.shortcode)) {
-            postsCache.markAnalysisComplete(fp.shortcode);
-          }
-        }
-      }
-
       // Guard: never show any data if token is not configured
       const token = await apiService.getApiToken();
       if (!token) {
@@ -188,210 +174,145 @@ const HomeScreen = () => {
         setLoading(false);
         return;
       }
-      // Always load and display cached posts immediately (non-blocking)
+
+      // Show cached posts immediately while fetching from server
       const cachedPosts = await postsCache.getCachedPosts();
       if (cachedPosts && cachedPosts.length > 0) {
-        console.log('HomeScreen - Loaded from cache:', cachedPosts.length, 'posts');
         setPosts(cachedPosts);
-        setLoading(false); // Clear loading immediately when we have cache
-        
-        // If cache is valid and not forcing refresh, we're done —
-        // BUT only skip the server fetch if there are NO analyzing posts.
-        // When posts are in-flight we must reach the watcher startup logic below.
-        if (!forceRefresh) {
-          const isValid = await postsCache.isCacheValid();
-          if (isValid && postsCache.getAnalyzingPosts().length === 0) {
+        setLoading(false);
+
+        // Skip server fetch if cache is fresh AND nothing is in-flight
+        if (!forceRefresh && postsCache.isCacheValid()) {
+          const hasLocalAnalyzing = postsCache.getAnalyzingPosts().length > 0;
+          const hasCachedProcessing = cachedPosts.some(p => p.processing);
+          if (!hasLocalAnalyzing && !hasCachedProcessing) {
+            startPollerIfNeeded(false);
             return;
           }
         }
-        
-        // If we got here, we'll fetch in background but UI is already showing cached posts
       } else {
-        // No cache, show loading spinner
         setLoading(true);
       }
-      
-      // Fetch from server in background (UI already showing if we have cache)
-      console.log('HomeScreen - Fetching from server in background...');
+
+      // Fetch fresh data from server
+      console.log('HomeScreen - Fetching from server...');
       const fetchedPosts = await apiService.getRecentPosts(50);
       console.log('HomeScreen - Fetched', fetchedPosts.length, 'posts from server');
 
-      // Re-seed the in-memory analyzingPosts from server state.
-      // This handles app restarts where the in-memory set is empty.
-      for (const p of fetchedPosts) {
-        if (p.processing && !postsCache.isAnalyzing(p.shortcode)) {
-          postsCache.markAsAnalyzing(p.shortcode);
-          console.log('HomeScreen - Re-seeded analyzing state from server for:', p.shortcode);
-        }
-      }
+      await applyServerPosts(fetchedPosts, cachedPosts || []);
 
-      // Clear analyzing state for posts the server says are now done.
-      const prevAnalyzing = postsCache.getAnalyzingPosts();
-      for (const shortcode of prevAnalyzing) {
-        const serverPost = fetchedPosts.find(p => p.shortcode === shortcode);
-        if (serverPost && !serverPost.processing) {
-          await postsCache.markAnalysisComplete(shortcode);
-          console.log('HomeScreen - Analysis complete for:', shortcode);
-        }
-      }
-
-      // Determine if anything is still in-flight (local cache OR server flag)
-      const serverHasProcessing = fetchedPosts.some(p => p.processing);
-      let hasBackendQueue = serverHasProcessing;
-      if (!hasBackendQueue) {
-        try {
-          const queueStatus = await apiService.getQueueStatus();
-          hasBackendQueue = !!(queueStatus && (queueStatus.processing_count > 0 || queueStatus.queue_count > 0));
-        } catch { /* ignore */ }
-      }
-
-      const stillAnalyzing = postsCache.getAnalyzingPosts();
-      const hasAnalyzing = stillAnalyzing.length > 0 || hasBackendQueue;
-
-      if (fetchedPosts.length > 0) {
-        // Server returned real data — merge with analyzing placeholders
-        const analyzingPlaceholders = (cachedPosts || []).filter(
-          p => stillAnalyzing.includes(p.shortcode) && !fetchedPosts.find(fp => fp.shortcode === p.shortcode)
-        );
-
-        const mergedPosts = [
-          ...analyzingPlaceholders,
-          ...fetchedPosts.filter(p => !stillAnalyzing.includes(p.shortcode)),
-        ];
-
-        setPosts(mergedPosts);
-        await postsCache.savePosts(mergedPosts);
-      } else if (hasAnalyzing && cachedPosts && cachedPosts.length > 0) {
-        // Server returned empty (busy/error) but we have cached posts — keep them intact
-        // DON'T overwrite cache; just make sure UI is showing cached data
-        console.log('HomeScreen - Server returned empty during analysis, keeping cached posts');
-        setPosts(cachedPosts);
-      } else if (!cachedPosts || cachedPosts.length === 0) {
-        console.log('HomeScreen - No posts found anywhere');
-        showToast('No posts yet — share something to get started!', 'info');
-      }
-
-      if (fetchedPosts.length > 0 || hasAnalyzing) {
-
-        if (hasAnalyzing && !pollIntervalRef.current) {
-          // Start a lightweight /queue-status poller instead of calling /recent every tick.
-          // Only fires a full loadPosts when backend signals it just finished processing.
-          console.log('HomeScreen - Starting queue-status watcher');
-          // Pre-seed synchronously so the FIRST interval tick sees wasActive=true.
-          // Without this, prevProcessingRef starts at 0 and the first tick misses
-          // the wasActive && nowIdle transition if the backend finishes quickly.
-          prevProcessingRef.current = 1;
-          apiService.getQueueStatus().then(s => {
-            const total = s ? s.processing_count + s.queue_count : 0;
-            if (total === 0) {
-              // Backend already finished by the time we seeded — kick a refresh immediately
-              // and stop the watcher so we don't loop endlessly.
-              console.log('HomeScreen - Backend already idle on seed, refreshing now');
-              clearInterval(pollIntervalRef.current!);
-              pollIntervalRef.current = null;
-              loadPostsRef.current?.(true);
-            } else {
-              prevProcessingRef.current = total;
-            }
-          }).catch(() => {});
-
-          const fetchFreshPosts = async () => {
-            console.log('HomeScreen - Checking for newly completed posts...');
-            try {
-              const freshPosts = await apiService.getRecentPosts(50);
-              if (freshPosts.length === 0) return;
-
-              // Re-seed any analyzing posts the server still knows about
-              for (const p of freshPosts) {
-                if (p.processing && !postsCache.isAnalyzing(p.shortcode)) {
-                  postsCache.markAsAnalyzing(p.shortcode);
-                }
-              }
-
-              // Check ALL locally tracked analyzing posts against server state
-              const stillAnalyzingNow = postsCache.getAnalyzingPosts();
-              let cacheUpdated = false;
-              for (const shortcode of stillAnalyzingNow) {
-                const serverPost = freshPosts.find(p => p.shortcode === shortcode);
-                // Post is done if: server returned it AND processing flag is false
-                if (serverPost && !serverPost.processing) {
-                  await postsCache.markAnalysisComplete(shortcode);
-                  console.log('HomeScreen - Analysis complete for:', shortcode);
-                  cacheUpdated = true;
-                }
-              }
-
-              if (cacheUpdated) {
-                const activeStillAnalyzing = postsCache.getAnalyzingPosts();
-                const cachedNow = await postsCache.getCachedPosts() || [];
-                const placeholders = cachedNow.filter(
-                  p => activeStillAnalyzing.includes(p.shortcode) && !freshPosts.find(fp => fp.shortcode === p.shortcode)
-                );
-                const newMerged = [
-                  ...placeholders,
-                  ...freshPosts.filter(p => !activeStillAnalyzing.includes(p.shortcode)),
-                ];
-                setPosts(newMerged);
-                await postsCache.savePosts(newMerged);
-              }
-            } catch (err) {
-              console.log('Failed to fetch fresh posts during polling', err);
-            }
-          };
-
-          // Instead of only polling queue status, check for completed posts directly
-          // This handles cases where backend finishes but app missed the transition
-          pollIntervalRef.current = setInterval(async () => {
-            try {
-              const status = await apiService.getQueueStatus();
-              if (!status) return;
-              const total = status.processing_count + status.queue_count;
-              const wasActive = prevProcessingRef.current > 0;
-              const nowIdle = total === 0;
-              const wasDecreased = total < prevProcessingRef.current;
-              prevProcessingRef.current = total;
-
-              // Check for completed posts if queue is draining or idle
-              if (wasDecreased || (wasActive && nowIdle) || (nowIdle && postsCache.getAnalyzingPosts().length > 0)) {
-                await fetchFreshPosts();
-              }
-
-              if (wasActive && nowIdle) {
-                // Backend just finished — fetch the completed post now
-                console.log('HomeScreen - Backend finished processing, refreshing...');
-                loadPostsRef.current?.(true);
-              } else if (nowIdle && postsCache.getAnalyzingPosts().length === 0) {
-                // Nothing left to track — stop watching
-                console.log('HomeScreen - Nothing analyzing, stopping watcher');
-                clearInterval(pollIntervalRef.current!);
-                pollIntervalRef.current = null;
-              }
-            } catch { /* network hiccup — keep polling */ }
-          }, 2000);
-
-        } else if (!hasAnalyzing && pollIntervalRef.current) {
-          console.log('HomeScreen - Stopping watcher, all posts analyzed');
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
-      }
     } catch (error: any) {
       console.error('Error loading posts:', error);
-      
-      // Only show error if we don't have cached posts
       const cachedPosts = await postsCache.getCachedPosts();
       if (!cachedPosts || cachedPosts.length === 0) {
         showToast('Failed to load posts: ' + (error.message || 'Unknown error'), 'error');
       } else {
-        console.log('HomeScreen - Using cached posts after server error');
         setPosts(cachedPosts);
       }
     } finally {
       setLoading(false);
     }
   };
+
+  /**
+   * Merge server posts with any local-only analyzing placeholders, update state/cache,
+   * then start or stop the poller based on whether anything is still processing.
+   *
+   * Server's `processing` flag is the single source of truth for whether a post is
+   * still being analyzed. Local analyzingPosts set is kept in sync but is NOT used
+   * as a render filter — posts always come from the server response.
+   */
+  const applyServerPosts = async (fetchedPosts: Post[], prevCached: Post[]) => {
+    // Sync local analyzingPosts set with server truth
+    for (const p of fetchedPosts) {
+      if (p.processing && !postsCache.isAnalyzing(p.shortcode)) {
+        postsCache.markAsAnalyzing(p.shortcode);
+      } else if (!p.processing && postsCache.isAnalyzing(p.shortcode)) {
+        await postsCache.markAnalysisComplete(p.shortcode);
+      }
+    }
+
+    // Local-only placeholders: in analyzingPosts but not yet returned by server
+    // (backend hasn't started or is mid-processing — keep them visible)
+    const serverShortcodes = new Set(fetchedPosts.map(p => p.shortcode));
+    const localOnlyPlaceholders = prevCached.filter(
+      p => postsCache.isAnalyzing(p.shortcode) && !serverShortcodes.has(p.shortcode)
+    );
+
+    const merged = [...localOnlyPlaceholders, ...fetchedPosts];
+
+    if (merged.length > 0) {
+      setPosts(merged);
+      await postsCache.savePosts(merged);
+    } else if (prevCached.length > 0) {
+      // Server returned nothing (transient error) — keep showing cached data
+      setPosts(prevCached);
+    } else {
+      showToast('No posts yet — share something to get started!', 'info');
+    }
+
+    const hasProcessing = merged.some(p => p.processing) || postsCache.getAnalyzingPosts().length > 0;
+    startPollerIfNeeded(hasProcessing);
+  };
+
+  /**
+   * Start the /recent poller when posts are processing, stop it when all are done.
+   * The poller is the single place that fires completion notifications.
+   */
+  const startPollerIfNeeded = (hasProcessing: boolean) => {
+    if (hasProcessing && !pollIntervalRef.current) {
+      console.log('HomeScreen - Starting processing poller');
+
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const freshPosts = await apiService.getRecentPosts(50);
+
+          // Detect any posts that just finished (were analyzing, now not processing)
+          const justCompleted: Post[] = [];
+          for (const p of freshPosts) {
+            if (postsCache.isAnalyzing(p.shortcode) && !p.processing) {
+              justCompleted.push(p);
+            }
+          }
+
+          // Update local state for completed posts
+          for (const p of justCompleted) {
+            await postsCache.markAnalysisComplete(p.shortcode);
+            console.log('HomeScreen - Poller detected analysis complete:', p.shortcode);
+            // Fire completion notification
+            sendAnalysisCompleteNotification(p).catch(() => {});
+          }
+
+          // Rebuild merged list — evict placeholders for posts now in server response
+          const prevCached = await postsCache.getCachedPosts() || [];
+          const serverShortcodes = new Set(freshPosts.map(p => p.shortcode));
+          const localOnlyPlaceholders = prevCached.filter(
+            p => postsCache.isAnalyzing(p.shortcode) && !serverShortcodes.has(p.shortcode)
+          );
+          const newMerged = [...localOnlyPlaceholders, ...freshPosts];
+
+          if (newMerged.length > 0) {
+            setPosts(newMerged);
+            await postsCache.savePosts(newMerged);
+          }
+
+          // Stop poller when nothing is processing anymore
+          const stillProcessing = newMerged.some(p => p.processing) || postsCache.getAnalyzingPosts().length > 0;
+          if (!stillProcessing) {
+            console.log('HomeScreen - Poller: all done, stopping');
+            clearInterval(pollIntervalRef.current!);
+            pollIntervalRef.current = null;
+          }
+        } catch { /* network hiccup — keep polling */ }
+      }, 3000);
+
+    } else if (!hasProcessing && pollIntervalRef.current) {
+      console.log('HomeScreen - Stopping poller, nothing processing');
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
   // Always keep ref pointing to latest loadPosts so setInterval never uses a stale closure
-  loadPostsRef.current = loadPosts;
 
   const onRefresh = async () => {
     setRefreshing(true);
