@@ -391,7 +391,7 @@ class ApiService {
       const headers = await this.getHeaders();
       const baseUrl = await this.getBaseUrl();
       await axios.delete(
-        `${baseUrl}/post/${shortcode}`,
+        `${baseUrl}/post/${encodeURIComponent(shortcode)}`,
         { headers }
       );
     } catch (error) {
