@@ -283,6 +283,46 @@ const HomeScreen = () => {
             }
           }).catch(() => {});
 
+          const fetchFreshPosts = async () => {
+            console.log('HomeScreen - Checking for newly completed posts...');
+            try {
+              const freshPosts = await apiService.getRecentPosts(30);
+              const stillAnalyzingNow = postsCache.getAnalyzingPosts();
+              
+              if (freshPosts.length > 0) {
+                let cacheUpdated = false;
+                for (const shortcode of stillAnalyzingNow) {
+                  const serverPost = freshPosts.find(p => p.shortcode === shortcode);
+                  if (serverPost && !serverPost.processing) {
+                    await postsCache.markAnalysisComplete(shortcode);
+                    console.log('HomeScreen - Analysis complete for:', shortcode);
+                    cacheUpdated = true;
+                  }
+                }
+                
+                if (cacheUpdated) {
+                  const activeStillAnalyzing = postsCache.getAnalyzingPosts();
+                  const cachedNow = await postsCache.getCachedPosts() || [];
+                  const placeholders = cachedNow.filter(
+                    p => activeStillAnalyzing.includes(p.shortcode) && !freshPosts.find(fp => fp.shortcode === p.shortcode)
+                  );
+                  
+                  const newMerged = [
+                    ...placeholders,
+                    ...freshPosts.filter(p => !activeStillAnalyzing.includes(p.shortcode)),
+                  ];
+                  
+                  setPosts(newMerged);
+                  await postsCache.savePosts(newMerged);
+                }
+              }
+            } catch (err) {
+              console.log('Failed to fetch fresh posts during polling', err);
+            }
+          };
+
+          // Instead of only polling queue status, check for completed posts directly
+          // This handles cases where backend finishes but app missed the transition
           pollIntervalRef.current = setInterval(async () => {
             try {
               const status = await apiService.getQueueStatus();
@@ -290,7 +330,13 @@ const HomeScreen = () => {
               const total = status.processing_count + status.queue_count;
               const wasActive = prevProcessingRef.current > 0;
               const nowIdle = total === 0;
+              const wasDecreased = total < prevProcessingRef.current;
               prevProcessingRef.current = total;
+
+              // Check for completed posts if queue is draining or idle
+              if (wasDecreased || (wasActive && nowIdle) || (nowIdle && postsCache.getAnalyzingPosts().length > 0)) {
+                await fetchFreshPosts();
+              }
 
               if (wasActive && nowIdle) {
                 // Backend just finished — fetch the completed post now
