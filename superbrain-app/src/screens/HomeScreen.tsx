@@ -63,6 +63,10 @@ const HomeScreen = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isConfigured, setIsConfigured] = useState(true);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Track consecutive misses per shortcode to evict stale analyzing placeholders
+  // (e.g. from before the shortcode-hash fix, or if backend stored under different key)
+  const pollMissCountRef = useRef<Map<string, number>>(new Map());
+  const STALE_MISS_THRESHOLD = 10; // 10 × 3s = 30s before evicting a zombie
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
 
@@ -266,6 +270,7 @@ const HomeScreen = () => {
       pollIntervalRef.current = setInterval(async () => {
         try {
           const freshPosts = await apiService.getRecentPosts(50);
+          const serverShortcodes = new Set(freshPosts.map(p => p.shortcode));
 
           // Detect any posts that just finished (were analyzing, now not processing)
           const justCompleted: Post[] = [];
@@ -278,14 +283,32 @@ const HomeScreen = () => {
           // Update local state for completed posts
           for (const p of justCompleted) {
             await postsCache.markAnalysisComplete(p.shortcode);
+            pollMissCountRef.current.delete(p.shortcode);
             console.log('HomeScreen - Poller detected analysis complete:', p.shortcode);
             // Fire completion notification
             sendAnalysisCompleteNotification(p).catch(() => {});
           }
 
+          // Evict stale analyzing entries: shortcodes that have never appeared in server
+          // responses after STALE_MISS_THRESHOLD polls (zombie placeholders from hash mismatch etc.)
+          const analyzingNow = postsCache.getAnalyzingPosts();
+          for (const sc of analyzingNow) {
+            if (!serverShortcodes.has(sc)) {
+              const misses = (pollMissCountRef.current.get(sc) ?? 0) + 1;
+              pollMissCountRef.current.set(sc, misses);
+              if (misses >= STALE_MISS_THRESHOLD) {
+                console.log('HomeScreen - Evicting stale analyzing placeholder:', sc, '(never seen on server after', misses, 'polls)');
+                await postsCache.markAnalysisComplete(sc);
+                pollMissCountRef.current.delete(sc);
+              }
+            } else {
+              // Reset miss count when server acknowledges it
+              pollMissCountRef.current.delete(sc);
+            }
+          }
+
           // Rebuild merged list — evict placeholders for posts now in server response
           const prevCached = await postsCache.getCachedPosts() || [];
-          const serverShortcodes = new Set(freshPosts.map(p => p.shortcode));
           const localOnlyPlaceholders = prevCached.filter(
             p => postsCache.isAnalyzing(p.shortcode) && !serverShortcodes.has(p.shortcode)
           );
@@ -302,6 +325,7 @@ const HomeScreen = () => {
             console.log('HomeScreen - Poller: all done, stopping');
             clearInterval(pollIntervalRef.current!);
             pollIntervalRef.current = null;
+            pollMissCountRef.current.clear();
           }
         } catch { /* network hiccup — keep polling */ }
       }, 3000);
@@ -310,6 +334,7 @@ const HomeScreen = () => {
       console.log('HomeScreen - Stopping poller, nothing processing');
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
+      pollMissCountRef.current.clear();
     }
   };
   // Always keep ref pointing to latest loadPosts so setInterval never uses a stale closure

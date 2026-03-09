@@ -125,29 +125,35 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
     return null;
   };
 
-  /** Generate a frontend-side shortcode that mirrors the backend's convention. */
-  const buildShortcode = (u: string, type: string, ytId: string | null): string | null => {
+  /**
+   * Compute SHA-256 hex digest of a string using the platform's native crypto.
+   * Matches Python: hashlib.sha256(s.encode()).hexdigest()
+   * Uses crypto.subtle (available in React Native Hermes ≥ 0.74 and all browsers).
+   */
+  const sha256hex = async (str: string): Promise<string> => {
+    const encoded = new TextEncoder().encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  };
+
+  /**
+   * Generate a frontend-side shortcode that mirrors the backend's convention.
+   * Returns null for unrecognised Instagram URLs (no shortcode extractable).
+   * Async because webpage shortcode requires SHA-256 via crypto.subtle.
+   */
+  const buildShortcode = async (u: string, type: string, ytId: string | null): Promise<string | null> => {
     if (type === 'instagram') {
-      const patterns = [
-        /instagram\.com\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/,
-      ];
-      for (const p of patterns) {
-        const m = u.match(p);
-        if (m) return m[1];
-      }
-      return null;
+      const m = u.match(/instagram\.com\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
+      return m ? m[1] : null;
     }
     if (type === 'youtube' && ytId) return `YT_${ytId}`;
-    // Webpage: deterministic FNV-1a hash → 16 hex chars (mirrors WP_ prefix)
-    const clean = u.toLowerCase().replace(/\/$/, '');
-    let h = 2166136261;
-    for (let i = 0; i < clean.length; i++) {
-      h ^= clean.charCodeAt(i);
-      h = Math.imul(h, 16777619) >>> 0;
-    }
-    let h2 = h ^ 0xdeadbeef;
-    h2 = Math.imul(h2, 16777619) >>> 0;
-    return `WP_${h.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+    // Webpage: WP_<sha256[:16]> — mirrors backend's _make_page_id(url):
+    //   hashlib.sha256(url.encode()).hexdigest()[:16]
+    // Pass the URL as-is (no lowercase, no trailing-slash strip) to match backend.
+    const hex = await sha256hex(u);
+    return `WP_${hex.slice(0, 16)}`;
   };
 
   const buildThumbnailUrl = (type: string, shortcode: string, ytId: string | null): string => {
@@ -213,7 +219,7 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
 
       const urlType = detectUrlType(url);
       const ytId = urlType === 'youtube' ? extractYouTubeVideoId(url) : null;
-      const shortcode = buildShortcode(url, urlType, ytId);
+      const shortcode = await buildShortcode(url, urlType, ytId);
       console.log('ShareHandler - type=%s shortcode=%s', urlType, shortcode);
 
       if (!shortcode) {

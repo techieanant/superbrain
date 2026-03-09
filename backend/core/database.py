@@ -183,13 +183,23 @@ class Database:
     # ------------------------------------------------------------------
 
     def check_cache(self, shortcode):
-        """Return cached analysis dict or None."""
+        """Return cached analysis dict or None.
+
+        Opens a fresh short-lived connection so that writes committed by a
+        *subprocess* (e.g. main.py) are immediately visible even when the
+        long-lived module-level connection has a stale WAL snapshot.
+        """
         if not self.is_connected():
             return None
         try:
-            cur = self._conn.cursor()
-            cur.execute("SELECT * FROM analyses WHERE shortcode = ?", (shortcode,))
-            return self._row_to_dict(cur.fetchone())
+            # Use a fresh connection to bypass any cached WAL snapshot held by
+            # the long-lived self._conn (avoids the subprocess-write race).
+            with sqlite3.connect(str(self.db_path), timeout=5) as fresh:
+                fresh.row_factory = sqlite3.Row
+                fresh.execute("PRAGMA journal_mode=WAL")
+                cur = fresh.cursor()
+                cur.execute("SELECT * FROM analyses WHERE shortcode = ?", (shortcode,))
+                return self._row_to_dict(cur.fetchone())
         except Exception as e:
             print(f"⚠️  Cache lookup error: {e}")
             return None
