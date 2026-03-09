@@ -11,8 +11,11 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-# Database file lives at the backend root
-DB_PATH = Path(__file__).resolve().parent.parent / 'superbrain.db'
+# Use /app/data for Docker, otherwise backend root
+if os.path.exists('/app/data'):
+    DB_PATH = Path('/app/data/superbrain.db')
+else:
+    DB_PATH = Path(__file__).resolve().parent.parent / 'superbrain.db'
 
 
 class Database:

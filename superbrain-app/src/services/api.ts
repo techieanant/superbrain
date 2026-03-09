@@ -320,18 +320,18 @@ class ApiService {
     }
   }
 
-  async saveNgrokToken(token: string): Promise<boolean> {
+  async saveNgrokToken(token: string, start: boolean = false): Promise<{ success: boolean; ngrok_url?: string }> {
     try {
       const baseUrl = await this.getBaseUrl();
-      if (!baseUrl) return false;
+      if (!baseUrl) return { success: false };
       
       const response = await fetch(`${baseUrl}/ngrok-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, start }),
       });
       const data = await response.json();
-      return data.success === true;
+      return data;
     } catch {
       return false;
     }

@@ -776,6 +776,18 @@
 
                 await fetch(`${API_BASE}/setup-complete`, { method: 'POST' });
 
+                // Start ngrok if token is configured
+                const ngrokToken = document.getElementById('ngrokToken').value.trim();
+                if (ngrokToken) {
+                    try {
+                        await fetch(`${API_BASE}/ngrok-token`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: ngrokToken, start: true })
+                        });
+                    } catch (e) { /* ignore */ }
+                }
+
                 showMessage('Configuration saved successfully!', 'success');
                 
                 document.getElementById('setupComplete').style.display = 'block';

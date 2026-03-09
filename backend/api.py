@@ -260,6 +260,7 @@ async def regenerate_token():
 async def save_ngrok_token(body: dict):
     """Save the ngrok token and optionally restart ngrok."""
     token = body.get("token", "").strip()
+    start_ngrok = body.get("start", False)
     
     # Save to config file
     keys = load_api_keys()
@@ -271,7 +272,65 @@ async def save_ngrok_token(body: dict):
     NGROK_TOKEN_FILE = CONFIG_DIR / "ngrok_token.txt"
     NGROK_TOKEN_FILE.write_text(token)
     
-    return {"success": True, "token": token}
+    # Start ngrok if requested
+    ngrok_url = None
+    if start_ngrok and token:
+        ngrok_url = await start_ngrok_tunnel()
+    
+    return {"success": True, "token": token, "ngrok_url": ngrok_url}
+
+
+async def start_ngrok_tunnel():
+    """Start ngrok tunnel and return the URL."""
+    import subprocess
+    import threading
+    import time
+    
+    NGROK_TOKEN_FILE = CONFIG_DIR / "ngrok_token.txt"
+    if not NGROK_TOKEN_FILE.exists():
+        return None
+    
+    token = NGROK_TOKEN_FILE.read_text().strip()
+    if not token:
+        return None
+    
+    def start_ngrok():
+        try:
+            # Configure authtoken
+            subprocess.run(["ngrok", "config", "add-authtoken", token], 
+                         capture_output=True, timeout=10)
+            # Kill existing ngrok if any
+            subprocess.run(["pkill", "-f", "ngrok"], capture_output=True)
+            time.sleep(1)
+            # Start ngrok
+            subprocess.Popen(["ngrok", "http", "5000"], 
+                            stdout=subprocess.DEVNULL, 
+                            stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+    
+    # Start ngrok in background thread
+    thread = threading.Thread(target=start_ngrok)
+    thread.start()
+    
+    # Wait for ngrok to start
+    time.sleep(5)
+    
+    # Try to get the URL
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "http://localhost:4040/api/tunnels"],
+            capture_output=True, text=True, timeout=5
+        )
+        import json
+        tunnels = json.loads(result.stdout)
+        for tunnel in tunnels.get("tunnels", []):
+            if tunnel.get("proto") == "https":
+                return tunnel["public_url"]
+    except Exception:
+        pass
+    
+    return None
 
 
 @app.get("/ngrok-token", include_in_schema=False)

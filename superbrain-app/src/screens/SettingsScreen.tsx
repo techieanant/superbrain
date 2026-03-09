@@ -162,10 +162,15 @@ const SettingsScreen = () => {
 
   const handleSaveNgrokToken = async () => {
     try {
-      const success = await apiService.saveNgrokToken(ngrokToken);
-      if (success) {
+      const result = await apiService.saveNgrokToken(ngrokToken, true);
+      if (result.success) {
         setNgrokConfigured(true);
-        setToast({ visible: true, message: 'Ngrok token saved! Restart server to apply.', type: 'success' });
+        if (result.ngrok_url) {
+          setNgrokUrl(result.ngrok_url);
+          setToast({ visible: true, message: `Ngrok started! URL: ${result.ngrok_url}`, type: 'success' });
+        } else {
+          setToast({ visible: true, message: 'Ngrok token saved! Starting tunnel...', type: 'success' });
+        }
       } else {
         setToast({ visible: true, message: 'Failed to save ngrok token', type: 'error' });
       }
