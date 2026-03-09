@@ -215,8 +215,17 @@ const HomeScreen = () => {
       console.log('HomeScreen - Fetching from server in background...');
       const fetchedPosts = await apiService.getRecentPosts(50);
       console.log('HomeScreen - Fetched', fetchedPosts.length, 'posts from server');
-      
-      // Clear analyzing state for posts that are now done on the server
+
+      // Re-seed the in-memory analyzingPosts from server state.
+      // This handles app restarts where the in-memory set is empty.
+      for (const p of fetchedPosts) {
+        if (p.processing && !postsCache.isAnalyzing(p.shortcode)) {
+          postsCache.markAsAnalyzing(p.shortcode);
+          console.log('HomeScreen - Re-seeded analyzing state from server for:', p.shortcode);
+        }
+      }
+
+      // Clear analyzing state for posts the server says are now done.
       const prevAnalyzing = postsCache.getAnalyzingPosts();
       for (const shortcode of prevAnalyzing) {
         const serverPost = fetchedPosts.find(p => p.shortcode === shortcode);
@@ -226,12 +235,15 @@ const HomeScreen = () => {
         }
       }
 
-      // Also check backend queue to detect posts that may have been added while app was closed
-      let hasBackendQueue = false;
-      try {
-        const queueStatus = await apiService.getQueueStatus();
-        hasBackendQueue = queueStatus && (queueStatus.processing_count > 0 || queueStatus.queue_count > 0);
-      } catch { /* ignore */ }
+      // Determine if anything is still in-flight (local cache OR server flag)
+      const serverHasProcessing = fetchedPosts.some(p => p.processing);
+      let hasBackendQueue = serverHasProcessing;
+      if (!hasBackendQueue) {
+        try {
+          const queueStatus = await apiService.getQueueStatus();
+          hasBackendQueue = !!(queueStatus && (queueStatus.processing_count > 0 || queueStatus.queue_count > 0));
+        } catch { /* ignore */ }
+      }
 
       const stillAnalyzing = postsCache.getAnalyzingPosts();
       const hasAnalyzing = stillAnalyzing.length > 0 || hasBackendQueue;
@@ -286,35 +298,41 @@ const HomeScreen = () => {
           const fetchFreshPosts = async () => {
             console.log('HomeScreen - Checking for newly completed posts...');
             try {
-              const freshPosts = await apiService.getRecentPosts(30);
+              const freshPosts = await apiService.getRecentPosts(50);
+              if (freshPosts.length === 0) return;
+
+              // Re-seed any analyzing posts the server still knows about
+              for (const p of freshPosts) {
+                if (p.processing && !postsCache.isAnalyzing(p.shortcode)) {
+                  postsCache.markAsAnalyzing(p.shortcode);
+                }
+              }
+
+              // Check ALL locally tracked analyzing posts against server state
               const stillAnalyzingNow = postsCache.getAnalyzingPosts();
-              
-              if (freshPosts.length > 0) {
-                let cacheUpdated = false;
-                for (const shortcode of stillAnalyzingNow) {
-                  const serverPost = freshPosts.find(p => p.shortcode === shortcode);
-                  if (serverPost && !serverPost.processing) {
-                    await postsCache.markAnalysisComplete(shortcode);
-                    console.log('HomeScreen - Analysis complete for:', shortcode);
-                    cacheUpdated = true;
-                  }
+              let cacheUpdated = false;
+              for (const shortcode of stillAnalyzingNow) {
+                const serverPost = freshPosts.find(p => p.shortcode === shortcode);
+                // Post is done if: server returned it AND processing flag is false
+                if (serverPost && !serverPost.processing) {
+                  await postsCache.markAnalysisComplete(shortcode);
+                  console.log('HomeScreen - Analysis complete for:', shortcode);
+                  cacheUpdated = true;
                 }
-                
-                if (cacheUpdated) {
-                  const activeStillAnalyzing = postsCache.getAnalyzingPosts();
-                  const cachedNow = await postsCache.getCachedPosts() || [];
-                  const placeholders = cachedNow.filter(
-                    p => activeStillAnalyzing.includes(p.shortcode) && !freshPosts.find(fp => fp.shortcode === p.shortcode)
-                  );
-                  
-                  const newMerged = [
-                    ...placeholders,
-                    ...freshPosts.filter(p => !activeStillAnalyzing.includes(p.shortcode)),
-                  ];
-                  
-                  setPosts(newMerged);
-                  await postsCache.savePosts(newMerged);
-                }
+              }
+
+              if (cacheUpdated) {
+                const activeStillAnalyzing = postsCache.getAnalyzingPosts();
+                const cachedNow = await postsCache.getCachedPosts() || [];
+                const placeholders = cachedNow.filter(
+                  p => activeStillAnalyzing.includes(p.shortcode) && !freshPosts.find(fp => fp.shortcode === p.shortcode)
+                );
+                const newMerged = [
+                  ...placeholders,
+                  ...freshPosts.filter(p => !activeStillAnalyzing.includes(p.shortcode)),
+                ];
+                setPosts(newMerged);
+                await postsCache.savePosts(newMerged);
               }
             } catch (err) {
               console.log('Failed to fetch fresh posts during polling', err);

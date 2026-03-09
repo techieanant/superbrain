@@ -327,9 +327,13 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
           
           await collectionsService.addPostToCollection(collectionId, shortcode);
 
-          // Trigger backend analysis in background
-          apiService.analyzeInstagramUrl(url).then(async () => {
-            // When analysis completes, merge fresh posts with analyzing placeholders
+          // Trigger backend analysis in background.
+          // NOTE: we intentionally do NOT send a failure notification on network/timeout
+          // errors here — Android may kill this fetch when the app goes to background
+          // even though the backend is still processing. The HomeScreen polling will
+          // detect completion/failure via /recent + /queue-status instead.
+          apiService.analyzeInstagramUrl(url).then(async (result) => {
+            // Backend returned success synchronously (cache hit or very fast analysis)
             const freshPosts = await apiService.getRecentPosts(50);
             if (freshPosts.length > 0) {
               const stillAnalyzing = postsCache.getAnalyzingPosts().filter(s => s !== shortcode);
@@ -340,31 +344,27 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
               await postsCache.savePosts([...placeholders, ...freshPosts]);
             }
             postsCache.markAnalysisComplete(shortcode);
-            // Send analysis complete notification
             const completedPost = freshPosts.find(p => p.shortcode === shortcode) || placeholderPost;
             sendAnalysisCompleteNotification(completedPost).catch(() => {});
           }).catch((err: any) => {
             if (err?.isRetryQueued) {
-              showToast('⏰ Queued — will retry automatically tomorrow', 'info');
-            } else {
-              console.error('Background analysis error:', err);
-              postsCache.markAsFailed(
-                shortcode,
-                url,
-                post?.title || '',
-                post?.thumbnail_url,
-                post?.content_type,
-              );
-              sendAnalysisFailedNotification(placeholderPost, err?.message).catch(() => {});
+              // Backend explicitly said to retry — safe to surface this
+              console.log('ShareHandler - Queued for retry:', shortcode);
+              postsCache.markAnalysisComplete(shortcode);
+              return;
             }
-            postsCache.markAnalysisComplete(shortcode);
+            // Network/timeout/abort error — backend may still be running.
+            // Do NOT mark as failed or send a failure notification.
+            // HomeScreen polling will detect the real outcome via /recent.
+            console.log('ShareHandler - analyze request dropped (background kill or timeout), backend still processing:', err?.message);
+            // Leave the post in the analyzing state — poller will clear it
           });
         } else {
-          // No URL - just add to collection without analysis
+          // No shortcode — just add to collection without analysis
           if (collectionId === 'default_watch_later') {
-            sendImmediateWatchLaterNotification(placeholderPost).catch(() => {});
+            sendImmediateWatchLaterNotification(post).catch(() => {});
           } else {
-            sendImmediateSavedNotification(placeholderPost).catch(() => {});
+            sendImmediateSavedNotification(post).catch(() => {});
           }
         }
       }
@@ -407,49 +407,35 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
           await postsCache.savePosts(updatedPosts);
         }
         
-        // Trigger backend analysis in background
-        apiService.analyzeInstagramUrl(url).then(async () => {
-          const freshPosts = await apiService.getRecentPosts(50);
-          if (freshPosts.length > 0) {
-            const sc = post.shortcode!;
-            const stillAnalyzing = postsCache.getAnalyzingPosts().filter(s => s !== sc);
-            const cachedNow = await postsCache.getCachedPosts() || [];
-            const placeholders = cachedNow.filter(
-              p => stillAnalyzing.includes(p.shortcode) && !freshPosts.find(fp => fp.shortcode === p.shortcode)
-            );
-            await postsCache.savePosts([...placeholders, ...freshPosts]);
-          }
-          if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
-          // Send analysis complete notification
-          const completedPost = freshPosts.find(p => p.shortcode === post.shortcode) || post;
+        // Trigger backend analysis in background.
+          // Do NOT treat network/abort errors as failure — Android kills the fetch
+          // when the app backgrounds. HomeScreen polling handles real outcome detection.
+          apiService.analyzeInstagramUrl(url).then(async () => {
+            const freshPosts = await apiService.getRecentPosts(50);
+            if (freshPosts.length > 0) {
+              const sc = post.shortcode!;
+              const stillAnalyzing = postsCache.getAnalyzingPosts().filter(s => s !== sc);
+              const cachedNow = await postsCache.getCachedPosts() || [];
+              const placeholders = cachedNow.filter(
+                p => stillAnalyzing.includes(p.shortcode) && !freshPosts.find(fp => fp.shortcode === p.shortcode)
+              );
+              await postsCache.savePosts([...placeholders, ...freshPosts]);
+            }
+            if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
+            const completedPost = freshPosts.find(p => p.shortcode === post.shortcode) || post;
             sendAnalysisCompleteNotification(completedPost).catch(() => {});
           }).catch((err: any) => {
             if (err?.isRetryQueued) {
-              showToast('⏰ Quota full — queued for retry tomorrow', 'info');
-            } else {
-              console.error('Background analysis error:', err);
-              if (post?.shortcode) {
-                postsCache.markAsFailed(
-                  post.shortcode,
-                  url,
-                  post?.title || '',
-                  post?.thumbnail_url,
-                  post?.content_type,
-                );
-                sendAnalysisFailedNotification(post, err?.message).catch(() => {});
-              }
+              console.log('ShareHandler - Queued for retry:', post.shortcode);
+              if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
+              return;
             }
-            if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
+            // Network/abort — backend may still be running. Let poller handle it.
+            console.log('ShareHandler - analyze dropped (background), backend still processing:', err?.message);
           });
         } else {
-          // No URL provided - just save to collection without analysis
-          if (post) {
-            if (collectionId === 'default_watch_later') {
-              sendImmediateWatchLaterNotification(post).catch(() => {});
-            } else {
-              sendImmediateSavedNotification(post).catch(() => {});
-            }
-          }
+          // No URL provided — nothing to analyze
+          if (post) sendImmediateSavedNotification(post).catch(() => {});
         }
       
       // Return to previous app

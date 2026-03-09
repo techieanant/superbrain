@@ -66,8 +66,8 @@ class ApiService {
       const baseUrl = await this.getBaseUrl();
       const response = await axios.post<ApiResponse>(
         `${baseUrl}/analyze`,
-        { url, force: true },
-        { headers }
+        { url },
+        { headers, timeout: 120000 } // 2-minute timeout — analysis can take up to ~60s
       );
       return response.data;
     } catch (error: any) {
@@ -333,7 +333,7 @@ class ApiService {
       const data = await response.json();
       return data;
     } catch {
-      return false;
+      return { success: false };
     }
   }
 
