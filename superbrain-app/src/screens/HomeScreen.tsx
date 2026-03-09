@@ -226,8 +226,15 @@ const HomeScreen = () => {
         }
       }
 
+      // Also check backend queue to detect posts that may have been added while app was closed
+      let hasBackendQueue = false;
+      try {
+        const queueStatus = await apiService.getQueueStatus();
+        hasBackendQueue = queueStatus && (queueStatus.processing_count > 0 || queueStatus.queue_count > 0);
+      } catch { /* ignore */ }
+
       const stillAnalyzing = postsCache.getAnalyzingPosts();
-      const hasAnalyzing = stillAnalyzing.length > 0;
+      const hasAnalyzing = stillAnalyzing.length > 0 || hasBackendQueue;
 
       if (fetchedPosts.length > 0) {
         // Server returned real data — merge with analyzing placeholders

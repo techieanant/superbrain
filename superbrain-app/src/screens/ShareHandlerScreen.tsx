@@ -327,14 +327,6 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
           
           await collectionsService.addPostToCollection(collectionId, shortcode);
 
-          // Fire instant + daily notifications for Watch Later adds;
-          // fire instant "Saved" notification for all other collections
-          if (collectionId === 'default_watch_later') {
-            sendImmediateWatchLaterNotification(placeholderPost).catch(() => {});
-          } else {
-            sendImmediateSavedNotification(placeholderPost).catch(() => {});
-          }
-
           // Trigger backend analysis in background
           apiService.analyzeInstagramUrl(url).then(async () => {
             // When analysis completes, merge fresh posts with analyzing placeholders
@@ -367,6 +359,13 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
             }
             postsCache.markAnalysisComplete(shortcode);
           });
+        } else {
+          // No URL - just add to collection without analysis
+          if (collectionId === 'default_watch_later') {
+            sendImmediateWatchLaterNotification(placeholderPost).catch(() => {});
+          } else {
+            sendImmediateSavedNotification(placeholderPost).catch(() => {});
+          }
         }
       }
       
@@ -423,29 +422,35 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
           if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
           // Send analysis complete notification
           const completedPost = freshPosts.find(p => p.shortcode === post.shortcode) || post;
-          sendAnalysisCompleteNotification(completedPost).catch(() => {});
-        }).catch((err: any) => {
-          if (err?.isRetryQueued) {
-            showToast('⏰ Quota full — queued for retry tomorrow', 'info');
-          } else {
-            console.error('Background analysis error:', err);
-            if (post?.shortcode) {
-              postsCache.markAsFailed(
-                post.shortcode,
-                url,
-                post?.title || '',
-                post?.thumbnail_url,
-                post?.content_type,
-              );
-              sendAnalysisFailedNotification(post, err?.message).catch(() => {});
+            sendAnalysisCompleteNotification(completedPost).catch(() => {});
+          }).catch((err: any) => {
+            if (err?.isRetryQueued) {
+              showToast('⏰ Quota full — queued for retry tomorrow', 'info');
+            } else {
+              console.error('Background analysis error:', err);
+              if (post?.shortcode) {
+                postsCache.markAsFailed(
+                  post.shortcode,
+                  url,
+                  post?.title || '',
+                  post?.thumbnail_url,
+                  post?.content_type,
+                );
+                sendAnalysisFailedNotification(post, err?.message).catch(() => {});
+              }
+            }
+            if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
+          });
+        } else {
+          // No URL provided - just save to collection without analysis
+          if (post) {
+            if (collectionId === 'default_watch_later') {
+              sendImmediateWatchLaterNotification(post).catch(() => {});
+            } else {
+              sendImmediateSavedNotification(post).catch(() => {});
             }
           }
-          if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
-        });
-      }
-      
-      if (post) sendImmediateSavedNotification(post).catch(() => {});
-      showToast('✨ Saved — analyzing in background...', 'info');
+        }
       
       // Return to previous app
       setTimeout(() => {
