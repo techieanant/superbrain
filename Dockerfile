@@ -37,14 +37,7 @@ WORKDIR /app
 
 COPY --from=builder /install /usr/local
 
-COPY backend/requirements.txt ./
-COPY backend/api.py ./
-COPY backend/main.py ./
-COPY backend/start.py ./
-COPY backend/reset.py ./
-COPY backend/core/ ./core/
-COPY backend/analyzers/ ./analyzers/
-COPY backend/instagram/ ./instagram/
+COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 COPY backend/static/ ./static/
 COPY backend/config/ ./config/
