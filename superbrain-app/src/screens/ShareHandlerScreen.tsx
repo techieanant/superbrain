@@ -18,7 +18,7 @@ import { colors } from '../theme/colors';
 import apiService from '../services/api';
 import postsCache from '../services/postsCache';
 import collectionsService from '../services/collections';
-import { sendImmediateWatchLaterNotification, sendImmediateSavedNotification } from '../services/notificationService';
+import { sendImmediateWatchLaterNotification, sendImmediateSavedNotification, sendAnalysisCompleteNotification, sendAnalysisFailedNotification } from '../services/notificationService';
 import { Post, Collection } from '../types';
 import CustomToast from '../components/CustomToast';
 
@@ -348,18 +348,23 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
               await postsCache.savePosts([...placeholders, ...freshPosts]);
             }
             postsCache.markAnalysisComplete(shortcode);
+            // Send analysis complete notification
+            const completedPost = freshPosts.find(p => p.shortcode === shortcode) || placeholderPost;
+            sendAnalysisCompleteNotification(completedPost).catch(() => {});
           }).catch((err: any) => {
             if (err?.isRetryQueued) {
               showToast('⏰ Queued — will retry automatically tomorrow', 'info');
             } else {
-              console.error('Background analysis error:', err);              // Track in local failed list so user can re-analyze from Library
+              console.error('Background analysis error:', err);
               postsCache.markAsFailed(
                 shortcode,
                 url,
                 post?.title || '',
                 post?.thumbnail_url,
                 post?.content_type,
-              );            }
+              );
+              sendAnalysisFailedNotification(placeholderPost, err?.message).catch(() => {});
+            }
             postsCache.markAnalysisComplete(shortcode);
           });
         }
@@ -416,11 +421,15 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
             await postsCache.savePosts([...placeholders, ...freshPosts]);
           }
           if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
+          // Send analysis complete notification
+          const completedPost = freshPosts.find(p => p.shortcode === post.shortcode) || post;
+          sendAnalysisCompleteNotification(completedPost).catch(() => {});
         }).catch((err: any) => {
           if (err?.isRetryQueued) {
             showToast('⏰ Quota full — queued for retry tomorrow', 'info');
           } else {
-            console.error('Background analysis error:', err);            if (post?.shortcode) {
+            console.error('Background analysis error:', err);
+            if (post?.shortcode) {
               postsCache.markAsFailed(
                 post.shortcode,
                 url,
@@ -428,7 +437,9 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
                 post?.thumbnail_url,
                 post?.content_type,
               );
-            }          }
+              sendAnalysisFailedNotification(post, err?.message).catch(() => {});
+            }
+          }
           if (post.shortcode) postsCache.markAnalysisComplete(post.shortcode);
         });
       }

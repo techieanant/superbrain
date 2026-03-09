@@ -376,3 +376,57 @@ export async function sendImmediateSavedNotification(post: Post): Promise<void> 
     console.warn('[Notifications] sendImmediateSavedNotification error:', e);
   }
 }
+
+// ─────────────────────────────────────────────
+// Analysis complete notification
+// ─────────────────────────────────────────────
+export async function sendAnalysisCompleteNotification(post: Post): Promise<void> {
+  try {
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+
+    const body = post.title
+      ? `"${post.title}" is ready!`
+      : 'Your post has been analyzed!';
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '✅ Analysis Complete',
+        body,
+        sound: 'default',
+        data: { shortcode: post.shortcode, type: 'analysis_complete' },
+        ...(Platform.OS === 'android' ? { channelId: 'watch-later-urgent', color: '#3fb950' } : {}),
+      },
+      trigger: null,
+    });
+  } catch (e) {
+    console.warn('[Notifications] sendAnalysisCompleteNotification error:', e);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Analysis failed notification
+// ─────────────────────────────────────────────
+export async function sendAnalysisFailedNotification(post: Post, error?: string): Promise<void> {
+  try {
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+
+    const body = post.title
+      ? `"${post.title}" failed to analyze`
+      : error || 'Analysis failed';
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '❌ Analysis Failed',
+        body,
+        sound: 'default',
+        data: { shortcode: post.shortcode, type: 'analysis_failed' },
+        ...(Platform.OS === 'android' ? { channelId: 'watch-later-urgent', color: '#f85149' } : {}),
+      },
+      trigger: null,
+    });
+  } catch (e) {
+    console.warn('[Notifications] sendAnalysisFailedNotification error:', e);
+  }
+}

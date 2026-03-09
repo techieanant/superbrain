@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, Modal } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, TouchableWithoutFeedback } from 'react-native';
 import { colors } from '../theme/colors';
 
 const { width } = Dimensions.get('window');
@@ -81,16 +81,8 @@ const CustomToast: React.FC<CustomToastProps> = ({
   const typeStyles = getTypeStyles();
 
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="none"
-      statusBarTranslucent
-      hardwareAccelerated
-      onRequestClose={() => {}}
-    >
+    <TouchableWithoutFeedback onPress={hideToast}>
       <Animated.View
-        pointerEvents="none"
         style={[
           styles.container,
           {
@@ -98,13 +90,14 @@ const CustomToast: React.FC<CustomToastProps> = ({
             transform: [{ translateY }],
           },
         ]}
+        pointerEvents="box-none"
       >
         <View style={[styles.toast, { backgroundColor: typeStyles.backgroundColor }]}>
           <Text style={styles.icon}>{typeStyles.icon}</Text>
           <Text style={styles.message}>{message}</Text>
         </View>
       </Animated.View>
-    </Modal>
+    </TouchableWithoutFeedback>
   );
 };
 
