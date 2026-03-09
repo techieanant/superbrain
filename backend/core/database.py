@@ -241,7 +241,7 @@ class Database:
             return False
     
     def get_recent(self, limit=10):
-        """Return the most recently analysed posts (excludes soft-deleted)."""
+        """Return the most recently analysed posts (excludes soft-deleted) with processing flag."""
         if not self.is_connected():
             return []
         try:
@@ -249,7 +249,22 @@ class Database:
             cur.execute(
                 "SELECT * FROM analyses WHERE (is_hidden IS NULL OR is_hidden = 0) ORDER BY analyzed_at DESC LIMIT ?", (limit,)
             )
-            return [self._row_to_dict(r) for r in cur.fetchall()]
+            results = [self._row_to_dict(r) for r in cur.fetchall()]
+            
+            # Get all items in processing_queue to check if any are still being processed
+            processing_items = self.get_processing()
+            all_queue_items = []
+            try:
+                cur.execute("SELECT shortcode FROM processing_queue WHERE status IN ('queued', 'processing')")
+                all_queue_items = [r["shortcode"] for r in cur.fetchall()]
+            except:
+                pass
+            
+            # Add processing flag to each result
+            for item in results:
+                item['processing'] = item['shortcode'] in all_queue_items or item['shortcode'] in processing_items
+            
+            return results
         except Exception as e:
             print(f"⚠️  Error retrieving recent: {e}")
             return []
