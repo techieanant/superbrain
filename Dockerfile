@@ -29,9 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir yt-dlp \
-    && curl -sSL https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o /tmp/ngrok.zip \
-    && unzip -o /tmp/ngrok.zip -d /usr/local/bin \
-    && rm /tmp/ngrok.zip
+    && curl -sSL https://bin.ngrok.com/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz -o /tmp/ngrok.tgz \
+    && tar -xzf /tmp/ngrok.tgz -C /usr/local/bin \
+    && rm /tmp/ngrok.tgz
 
 WORKDIR /app
 
