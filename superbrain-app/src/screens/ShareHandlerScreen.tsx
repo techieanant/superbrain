@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as ExpoCrypto from 'expo-crypto';
 import {
   View,
   Text,
@@ -126,22 +127,18 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
   };
 
   /**
-   * Compute SHA-256 hex digest of a string using the platform's native crypto.
+   * Compute SHA-256 hex digest of a string using expo-crypto.
    * Matches Python: hashlib.sha256(s.encode()).hexdigest()
-   * Uses crypto.subtle (available in React Native Hermes ≥ 0.74 and all browsers).
+   * Works on Android (Hermes), iOS, and web.
    */
   const sha256hex = async (str: string): Promise<string> => {
-    const encoded = new TextEncoder().encode(str);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
-    return Array.from(new Uint8Array(hashBuffer))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+    return ExpoCrypto.digestStringAsync(ExpoCrypto.CryptoDigestAlgorithm.SHA256, str);
   };
 
   /**
    * Generate a frontend-side shortcode that mirrors the backend's convention.
    * Returns null for unrecognised Instagram URLs (no shortcode extractable).
-   * Async because webpage shortcode requires SHA-256 via crypto.subtle.
+   * Async because webpage shortcode requires SHA-256 via expo-crypto.
    */
   const buildShortcode = async (u: string, type: string, ytId: string | null): Promise<string | null> => {
     if (type === 'instagram') {
