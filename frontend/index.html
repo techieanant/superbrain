@@ -543,6 +543,9 @@
             <p class="hint">
                 API Token: <strong id="serverToken"></strong>
             </p>
+            <p class="hint" id="ngrokUrlHint" style="display: none;">
+                🔗 ngrok URL: <strong id="ngrokUrl"></strong>
+            </p>
             
             <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
                 <h3 style="color: var(--primary); margin-bottom: 1rem;">Test Your Setup</h3>
@@ -687,12 +690,26 @@
                     document.getElementById('setupForm').style.display = 'none';
                     document.getElementById('setupComplete').style.display = 'block';
                     document.getElementById('serverUrl').textContent = window.location.origin;
-                    loadToken();
+                    await loadToken();
+                    await loadNgrokUrl();
                     return true;
                 }
                 return false;
             } catch (e) {
                 return false;
+            }
+        }
+
+        async function loadNgrokUrl() {
+            try {
+                const res = await fetch(`${API_BASE}/ngrok-url`);
+                const data = await res.json();
+                if (data.ngrok_url) {
+                    document.getElementById('ngrokUrlHint').style.display = 'block';
+                    document.getElementById('ngrokUrl').textContent = data.ngrok_url;
+                }
+            } catch (e) {
+                // ignore
             }
         }
 
@@ -764,6 +781,7 @@
                 document.getElementById('setupComplete').style.display = 'block';
                 document.getElementById('setupForm').style.display = 'none';
                 await loadToken();
+                await loadNgrokUrl();
                 
                 document.getElementById('serverUrl').textContent = window.location.origin;
 

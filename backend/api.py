@@ -267,6 +267,7 @@ async def save_ngrok_token(body: dict):
     save_api_keys(keys)
     
     # Also save to ngrok_token.txt for docker-entrypoint.sh
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     NGROK_TOKEN_FILE = CONFIG_DIR / "ngrok_token.txt"
     NGROK_TOKEN_FILE.write_text(token)
     
@@ -537,28 +538,12 @@ class AnalysisResponse(BaseModel):
 
 @app.get("/")
 async def root():
-    """API information and health check (no authentication required)"""
-    setup_complete = SETUP_DONE_FILE.exists() and SETUP_DONE_FILE.read_text().strip() == "ok"
-    if not setup_complete:
-        from fastapi.responses import FileResponse
-        frontend_path = BASE_DIR.parent / "frontend" / "index.html"
-        if frontend_path.exists():
-            return FileResponse(str(frontend_path), media_type="text/html")
-    return {
-        "name": "SuperBrain Instagram Analyzer API",
-        "version": "1.02",
-        "status": "operational",
-        "authentication": "Required - Use X-API-Key header",
-        "endpoints": {
-            "POST /analyze": "Analyze content from Instagram, YouTube, or any web page (requires auth)",
-            "GET /caption": "Get post caption quickly (requires auth)",
-            "GET /cache/{shortcode}": "Check cache (requires auth)",
-            "GET /recent": "Get recent analyses (requires auth)",
-            "GET /stats": "Database statistics (requires auth)",
-            "GET /category/{category}": "Get by category (requires auth)",
-            "GET /search": "Search by tags (requires auth)"
-        }
-    }
+    """Serve the frontend UI (always)"""
+    from fastapi.responses import FileResponse, RedirectResponse
+    frontend_path = BASE_DIR.parent / "frontend" / "index.html"
+    if frontend_path.exists():
+        return RedirectResponse(url="/setup")
+    return {"error": "Frontend not found"}
 
 
 @app.get("/caption")
