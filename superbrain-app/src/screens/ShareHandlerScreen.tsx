@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as ExpoCrypto from 'expo-crypto';
 import {
   View,
@@ -11,6 +11,9 @@ import {
   ScrollView,
   Dimensions,
   BackHandler,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import * as Linking from 'expo-linking';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -27,6 +30,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ShareHandler'>;
 
 const { width } = Dimensions.get('window');
 
+const EMOJI_ICONS = ['📁', '✈️', '🍔', '👕', '💪', '📚', '🎬', '📸', '⭐', '❤️', '🔥', '🎯'];
+
 const ShareHandlerScreen = ({ route, navigation }: Props) => {
   const [url, setUrl] = useState<string | null>(null);
   const [processing, setProcessing] = useState(true);
@@ -37,6 +42,10 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
   const [loadingCollections, setLoadingCollections] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'warning' | 'info' });
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [selectedIcon, setSelectedIcon] = useState('📁');
+  const createInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     getSharedUrl();
@@ -295,6 +304,28 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
       setToast({ visible: true, message: 'Failed to load collections', type: 'error' });
     } finally {
       setLoadingCollections(false);
+    }
+  };
+
+  const handleCreateAndAdd = async () => {
+    if (!newCollectionName.trim()) {
+      setToast({ visible: true, message: 'Please enter a collection name', type: 'warning' });
+      return;
+    }
+
+    try {
+      const newCollection = await collectionsService.createCollection(
+        newCollectionName.trim(), 
+        selectedIcon
+      );
+      
+      await handleAddToCollection(newCollection.id);
+      
+      setShowCreateModal(false);
+      setNewCollectionName('');
+      setSelectedIcon('📁');
+    } catch (error) {
+      setToast({ visible: true, message: 'Failed to create collection', type: 'error' });
     }
   };
 
@@ -560,6 +591,14 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
         )}
 
         <TouchableOpacity 
+          style={styles.createCollectionButton}
+          onPress={() => setShowCreateModal(true)}
+        >
+          <Text style={styles.createCollectionIcon}>+</Text>
+          <Text style={styles.createCollectionText}>Create New Collection</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
           style={[styles.doneButton, isSaving && styles.doneButtonDisabled]} 
           onPress={handleDone}
           disabled={isSaving}
@@ -569,6 +608,71 @@ const ShareHandlerScreen = ({ route, navigation }: Props) => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.createModalOverlay}
+        >
+          <View style={styles.createModalContent}>
+            <Text style={styles.createModalTitle}>New Collection</Text>
+            
+            <TextInput
+              ref={createInputRef}
+              style={styles.createInput}
+              placeholder="Collection name"
+              placeholderTextColor={colors.textMuted}
+              value={newCollectionName}
+              onChangeText={setNewCollectionName}
+              autoFocus
+            />
+            
+            <Text style={styles.emojiPickerLabel}>Choose an icon</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.emojiPickerScroll}
+            >
+              {EMOJI_ICONS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={[
+                    styles.emojiOption,
+                    selectedIcon === emoji && styles.emojiOptionSelected
+                  ]}
+                  onPress={() => setSelectedIcon(emoji)}
+                >
+                  <Text style={styles.emojiOptionText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            
+            <View style={styles.createModalButtons}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => {
+                  setShowCreateModal(false);
+                  setNewCollectionName('');
+                  setSelectedIcon('📁');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.createButton}
+                onPress={handleCreateAndAdd}
+              >
+                <Text style={styles.createButtonText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <CustomToast
         visible={toast.visible}
@@ -769,6 +873,113 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  createCollectionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    marginBottom: 16,
+  },
+  createCollectionIcon: {
+    fontSize: 20,
+    color: colors.primary,
+    marginRight: 8,
+  },
+  createCollectionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  createModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  createModalContent: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 340,
+  },
+  createModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  createInput: {
+    backgroundColor: colors.backgroundCard,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 20,
+  },
+  emojiPickerLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 12,
+  },
+  emojiPickerScroll: {
+    marginBottom: 20,
+  },
+  emojiOption: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundCard,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  emojiOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '20',
+  },
+  emojiOptionText: {
+    fontSize: 24,
+  },
+  createModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundCard,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  createButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  createButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
